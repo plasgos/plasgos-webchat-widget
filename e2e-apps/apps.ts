@@ -54,6 +54,12 @@ export const APPS: readonly FixtureApp[] = [
         start: 'pnpm --dir fixtures/apps/angular-ssr start',
         entries: [{ label: 'SSR + hidrasi (zoneless)', path: '/', link: '#ke-produk', target: '/produk' }],
     },
+    {
+        name: 'sveltekit',
+        port: 4516,
+        start: 'pnpm --dir fixtures/apps/sveltekit start',
+        entries: [{ label: 'SvelteKit 3 (page dari $app/state)', path: '/', link: '#ke-produk', target: '/produk' }],
+    },
 ];
 
 /** `APPS=next15,nuxt3` membatasi aplikasi yang diuji (yang belum dibangun dilewati). */
