@@ -71,7 +71,8 @@ Menunggu domain widget dibeli (K1, nama kerja `plasgoschat.com`).
 3. **CloudFront `widget.<domain>`** — origin = api-crm (`/w/*`, `/m/*`, `/webchat/v1/*`, socket `/webchat`), cache
    dimatikan kecuali `GET /webchat/v1/widgets/*/config` (menghormati `Cache-Control: max-age=60` dari server),
    WebSocket diteruskan, header `X-Forwarded-For` diteruskan (api-crm membaca IP lewat
-   `WEBCHAT_TRUSTED_PROXY_HOPS`).
+   `WEBCHAT_TRUSTED_PROXY_HOPS`). *Origin request policy* juga meneruskan `CloudFront-Viewer-Country` dan
+   `CloudFront-Viewer-Country-Region-Name` — sumber lokasi kasar pengunjung di panel tim (tanpa basis data geo).
 4. **IAM** — peran deploy untuk CI (OIDC GitHub, tanpa kunci statis) dengan izin minimum: `s3:GetObject`,
    `s3:PutObject`, `s3:ListBucket` pada bucket ini dan `cloudfront:CreateInvalidation` pada distribusi `cdn`.
 5. **api-crm** — `WEBCHAT_CDN_ORIGIN=https://cdn.<domain>`, `WEBCHAT_PUBLIC_ORIGIN=https://widget.<domain>`.
