@@ -90,6 +90,12 @@ const off = getWebchat().on('unread_changed', ({ count }) => …);
   Versi CDN satu berkas: `dist/cdn/element.js` → `loader/v1/element.js`.
 - `pnpm --filter @plasgos/webchat smoke` mengimpor hasil build sebagai ESM & CJS di Node.
 
+## Wrapper framework
+
+| Paket | Pakai |
+|---|---|
+| `@plasgos/webchat-react` | `<PlasgosWebchat widgetId identityToken pathname />` + `usePlasgosWebchat()` (klien + `state` terbuka/belum dibaca). Tanpa DOM, aman StrictMode & SSR, keluaran berdirektif `"use client"` (Next App Router). Logout (token → kosong) = `shutdown` lalu sesi anonim baru. |
+
 ## Uji live terhadap api-crm
 
 `e2e-live/` menjalankan loader + aplikasi widget asli terhadap api-crm dev (REST, socket, inbox sungguhan) — tidak di

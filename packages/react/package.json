@@ -1,0 +1,32 @@
+{
+  "name": "@plasgos/webchat-react",
+  "version": "0.1.0",
+  "description": "Komponen & hook React untuk widget webchat Plasgos CRM (React 17–19, Next.js, Remix, Gatsby). Aman SSR.",
+  "keywords": ["plasgos", "crm", "webchat", "chat", "widget", "react", "nextjs"],
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Plasgos",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@plasgos/webchat": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=17 <20"
+  }
+}

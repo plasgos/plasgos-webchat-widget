@@ -59,3 +59,21 @@ test('snippet resmi + paket npm terpasang bersamaan → satu loader, satu widget
     await page.waitForTimeout(500);
     await expect(page.locator(ROOT)).toHaveCount(1);
 });
+
+for (const major of ['18', '19']) {
+    test(`React ${major} StrictMode: efek dua kali tetap satu widget; open() dari hook membuka chat`, async ({ page }) => {
+        const errors: string[] = [];
+        page.on('pageerror', (error) => errors.push(error.message));
+        await page.goto(`/fixtures/react-${major}-strict/`);
+
+        await expect(page.locator('#versi')).toContainText(`React ${major}.`);
+        await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
+        await expect(page.locator(ROOT)).toHaveCount(1);
+        expect(await page.locator('script[src="/packages/loader/dist/loader.js"]').count()).toBe(1);
+
+        await page.click('#bantuan');
+
+        await expect.poll(async () => (await commandsOf(page, 'open')).length).toBe(1);
+        expect(errors).toEqual([]);
+    });
+}

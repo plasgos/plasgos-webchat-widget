@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@plasgos/webchat": [
+        "../webchat/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "test"
+  ]
+}

@@ -25,7 +25,7 @@ export default tseslint.config(
         rules: style,
     },
     {
-        files: ['**/*.ts'],
+        files: ['**/*.{ts,tsx}'],
         extends: [js.configs.recommended, ...tseslint.configs.strictTypeChecked],
         plugins: { '@stylistic': stylistic },
         languageOptions: {
@@ -48,11 +48,11 @@ export default tseslint.config(
     },
     {
         // Aplikasi fixture framework (Solid, Lit, npm) = modul ES yang dibundel scripts/build-fixtures.mjs.
-        files: ['fixtures/*/main.js'],
-        languageOptions: { sourceType: 'module' },
+        files: ['fixtures/*/main.{js,jsx}'],
+        languageOptions: { sourceType: 'module', parserOptions: { ecmaFeatures: { jsx: true } } },
     },
     {
-        files: ['**/test/**/*.ts', 'e2e/**/*.ts', 'e2e-live/**/*.ts'],
+        files: ['**/test/**/*.{ts,tsx}', 'e2e/**/*.ts', 'e2e-live/**/*.ts'],
         rules: { '@typescript-eslint/explicit-function-return-type': 'off' },
     },
 );
