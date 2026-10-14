@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "paths": { "@plasgos/webchat": ["../webchat/src/index.ts"] }
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte", "test/**/*.ts"]
+}

@@ -122,3 +122,23 @@ test('Angular standalone: satu widget; navigasi Router dilaporkan SEKALI; servic
     await expect.poll(async () => (await commandsOf(page, 'open')).length).toBe(1);
     expect(errors).toEqual([]);
 });
+
+test('Svelte 5: satu widget; navigasi lewat prop pathname dilaporkan SEKALI; tombol membuka chat', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto('/fixtures/svelte5/');
+    await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
+    await expect.poll(() => receivedCount(page)).toBeGreaterThan(0);
+
+    await page.click('#ke-produk');
+
+    await expect.poll(async () => (await commandsOf(page, 'page')).length).toBe(1);
+    await page.waitForTimeout(600);
+    const pages = await commandsOf(page, 'page');
+    expect(pages).toHaveLength(1);
+    expect(pages[0]?.payload.args?.[0]).toMatchObject({ url: expect.stringContaining('/produk'), title: 'Svelte — produk' });
+
+    await page.click('#bantuan');
+    await expect.poll(async () => (await commandsOf(page, 'open')).length).toBe(1);
+    expect(errors).toEqual([]);
+});

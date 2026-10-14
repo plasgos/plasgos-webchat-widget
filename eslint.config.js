@@ -16,7 +16,7 @@ const style = {
 };
 
 export default tseslint.config(
-    { ignores: ['**/dist/**', '**/node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**', '.lighthouse/**'] },
+    { ignores: ['**/dist/**', '**/node_modules/**', '**/.svelte-kit/**', 'coverage/**', 'test-results/**', 'playwright-report/**', '.lighthouse/**'] },
     {
         files: ['**/*.{js,mjs}'],
         extends: [js.configs.recommended],

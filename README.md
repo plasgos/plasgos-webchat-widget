@@ -97,6 +97,7 @@ const off = getWebchat().on('unread_changed', ({ count }) => …);
 | `@plasgos/webchat-react` | `<PlasgosWebchat widgetId identityToken pathname />` + `usePlasgosWebchat()` (klien + `state` terbuka/belum dibaca). Tanpa DOM, aman StrictMode & SSR, keluaran berdirektif `"use client"` (Next App Router). Logout (token → kosong) = `shutdown` lalu sesi anonim baru. |
 | `@plasgos/webchat-vue` | `app.use(PlasgosWebchatPlugin, { widgetId, router })` + `usePlasgosWebchat()` (klien + `state` reaktif + `setIdentityToken`). Navigasi dari `router.afterEach` (hanya URL yang berubah); Nuxt 3 lewat plugin `.client`. |
 | `@plasgos/webchat-angular` | `providePlasgosWebchat({ widgetId })` di `bootstrapApplication` + `inject(PlasgosWebchatService)` (`state` signal, `setIdentityToken`). Boot setelah render pertama di luar zona (aman SSR & zoneless), navigasi dari `NavigationEnd`. Angular 17–22, tanpa decorator (tsup biasa). |
+| `@plasgos/webchat-svelte` | `<PlasgosWebchat widgetId identityToken pathname />` (Svelte 5, runes) + `webchat` & store `webchatState`. SvelteKit: `pathname={page.url.pathname}`. Dikemas `svelte-package` (sumber `.svelte`). |
 
 ## Uji live terhadap api-crm
 
