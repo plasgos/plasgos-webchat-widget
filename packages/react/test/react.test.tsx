@@ -74,6 +74,8 @@ describe('@plasgos/webchat-react', () => {
         const sequence = loader.calls.filter((call) => tracked.includes(call[0] as string)).map((call) => call[0]);
         expect(sequence).toEqual(['boot', 'identify', 'page', 'shutdown', 'boot']);
         expect(loader.calls.find((call) => call[0] === 'identify')?.[1]).toEqual({ token: 'jwt-1' });
+        // Aplikasi melaporkan navigasi (pathname) → deteksi otomatis loader dimatikan, tanpa laporan ganda.
+        expect(loader.calls.find((call) => call[0] === 'boot')?.[1]).toEqual({ autoPageTracking: false, widgetId: WIDGET_ID });
     });
 
 

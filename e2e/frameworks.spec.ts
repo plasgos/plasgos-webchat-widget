@@ -17,6 +17,12 @@ function liveWidgetFrame(page: Page): Frame | undefined {
     return page.frames().filter((frame) => frame.url().includes('/w/wgt_') && !frame.isDetached()).pop();
 }
 
+async function receivedCount(page: Page): Promise<number> {
+    const frame = liveWidgetFrame(page);
+    if (!frame) return 0;
+    return frame.evaluate(() => (window as unknown as { __received?: unknown[] }).__received?.length ?? 0);
+}
+
 async function commandsOf(page: Page, name: string): Promise<Received[]> {
     const frame = liveWidgetFrame(page);
     if (!frame) return [];
@@ -31,12 +37,7 @@ for (const fixture of ['solid-element', 'lit-element']) {
         await page.goto(`/fixtures/${fixture}/`);
 
         await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
-        const receivedCount = async (): Promise<number> => {
-            const frame = liveWidgetFrame(page);
-            if (!frame) return 0;
-            return frame.evaluate(() => (window as unknown as { __received?: unknown[] }).__received?.length ?? 0);
-        };
-        await expect.poll(receivedCount).toBeGreaterThan(0);
+        await expect.poll(() => receivedCount(page)).toBeGreaterThan(0);
 
         await page.click('#login');
         const identified = async (): Promise<unknown[]> =>
@@ -77,3 +78,24 @@ for (const major of ['18', '19']) {
         expect(errors).toEqual([]);
     });
 }
+
+test('Vue 3 + Vue Router: satu widget; navigasi dilaporkan SEKALI dari router; composable membuka chat', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto('/fixtures/vue3-router/');
+    await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
+    await expect.poll(() => receivedCount(page)).toBeGreaterThan(0);
+
+    await page.click('#ke-produk');
+    await expect(page.locator('h2')).toHaveText('Produk');
+
+    await expect.poll(async () => (await commandsOf(page, 'page')).length).toBe(1);
+    await page.waitForTimeout(600);
+    const pages = await commandsOf(page, 'page');
+    expect(pages).toHaveLength(1);
+    expect(pages[0]?.payload.args?.[0]).toMatchObject({ url: expect.stringContaining('/produk'), title: 'Vue — produk' });
+
+    await page.click('#bantuan');
+    await expect.poll(async () => (await commandsOf(page, 'open')).length).toBe(1);
+    expect(errors).toEqual([]);
+});

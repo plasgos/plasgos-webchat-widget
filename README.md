@@ -95,6 +95,7 @@ const off = getWebchat().on('unread_changed', ({ count }) => …);
 | Paket | Pakai |
 |---|---|
 | `@plasgos/webchat-react` | `<PlasgosWebchat widgetId identityToken pathname />` + `usePlasgosWebchat()` (klien + `state` terbuka/belum dibaca). Tanpa DOM, aman StrictMode & SSR, keluaran berdirektif `"use client"` (Next App Router). Logout (token → kosong) = `shutdown` lalu sesi anonim baru. |
+| `@plasgos/webchat-vue` | `app.use(PlasgosWebchatPlugin, { widgetId, router })` + `usePlasgosWebchat()` (klien + `state` reaktif + `setIdentityToken`). Navigasi dari `router.afterEach` (hanya URL yang berubah); Nuxt 3 lewat plugin `.client`. |
 
 ## Uji live terhadap api-crm
 

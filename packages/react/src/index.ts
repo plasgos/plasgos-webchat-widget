@@ -27,7 +27,9 @@ const STATE_EVENTS = ['ready', 'open', 'close', 'unread_changed', 'error'] as co
 
 /** Nyalakan widget. Logout (identityToken dari ada → tak ada) = shutdown lalu sesi anonim baru. */
 export function PlasgosWebchat(props: PlasgosWebchatProps): null {
-    const { identityToken, pathname, ...options } = props;
+    const { identityToken, pathname, ...widget } = props;
+    // `pathname` = aplikasi yang melaporkan navigasi → deteksi otomatis loader dimatikan (tanpa laporan ganda).
+    const options: WebchatOptions = pathname === undefined ? widget : { autoPageTracking: false, ...widget };
     const optionsKey = JSON.stringify(options);
     const optionsRef = useRef(options);
     optionsRef.current = options;
