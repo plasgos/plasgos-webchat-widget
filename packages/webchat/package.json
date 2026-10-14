@@ -2,14 +2,25 @@
   "name": "@plasgos/webchat",
   "version": "0.1.0",
   "description": "Widget webchat Plasgos CRM untuk aplikasi berbundler (Vite, webpack, Next, Nuxt, Angular, SvelteKit, Astro, Remix). Aman SSR.",
-  "keywords": ["plasgos", "crm", "webchat", "chat", "widget", "live-chat"],
+  "keywords": [
+    "plasgos",
+    "crm",
+    "webchat",
+    "chat",
+    "widget",
+    "live-chat"
+  ],
   "license": "SEE LICENSE IN LICENSE",
   "author": "Plasgos",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/element.js",
+    "./dist/element.cjs",
+    "./src/element.ts"
+  ],
   "exports": {
     ".": {
       "import": {
@@ -21,14 +32,29 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./element": {
+      "import": {
+        "types": "./dist/element.d.ts",
+        "default": "./dist/element.js"
+      },
+      "require": {
+        "types": "./dist/element.d.cts",
+        "default": "./dist/element.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "build": "tsup && node build-cdn.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "smoke": "node scripts/smoke-consume.mjs"
   }
 }

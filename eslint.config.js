@@ -47,6 +47,11 @@ export default tseslint.config(
         rules: { '@stylistic/max-len': 'off' },
     },
     {
+        // Aplikasi fixture framework (Solid, Lit, npm) = modul ES yang dibundel scripts/build-fixtures.mjs.
+        files: ['fixtures/*/main.js'],
+        languageOptions: { sourceType: 'module' },
+    },
+    {
         files: ['**/test/**/*.ts', 'e2e/**/*.ts', 'e2e-live/**/*.ts'],
         rules: { '@typescript-eslint/explicit-function-return-type': 'off' },
     },

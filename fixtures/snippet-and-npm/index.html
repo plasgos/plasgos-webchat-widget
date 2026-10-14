@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fixture — snippet + paket npm bersamaan</title>
+    <!-- Situs yang memasang snippet resmi DAN aplikasinya juga memanggil @plasgos/webchat — tetap satu widget. -->
+    <script>
+        (function (w, d, id) {
+            if (w.Plasgos) return;
+            var q = function () { q.q.push(arguments); }; q.q = [];
+            w.Plasgos = q;
+            var load = function () {
+                var s = d.createElement('script');
+                s.async = true;
+                s.src = '/packages/loader/dist/loader.js';
+                s.setAttribute('data-widget-id', id);
+                s.setAttribute('data-widget-origin', 'http://127.0.0.1:4400');
+                d.head.appendChild(s);
+            };
+            if (d.readyState === 'complete') load(); else w.addEventListener('load', load);
+            w.Plasgos('boot', { widgetId: id });
+        })(window, document, 'wgt_0123456789abcdef01234567');
+    </script>
+    <script type="module" src="./dist/main.js"></script>
+</head>
+<body><main><h1>Snippet + npm</h1></main></body>
+</html>

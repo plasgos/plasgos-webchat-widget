@@ -74,6 +74,22 @@ peramban yang didukung (Safari/iOS 15, Chrome/Edge/Firefox 100) supaya sintaks y
 | `ui/*`, `markdown`, `i18n`, `colors`, `layout` | tampilan tanpa `innerHTML` untuk isi pesan, markdown subset aman, id/en, kontras WCAG, tata letak bingkai |
 | `captcha`, `sound` | Turnstile dimuat hanya bila diminta server; nada notifikasi Web Audio |
 
+## Paket npm `@plasgos/webchat` & Web Component
+
+```ts
+import { loadWebchat, getWebchat } from '@plasgos/webchat';      // aman SSR: di server semua no-op
+await loadWebchat({ widgetId: 'wgt_…', identityToken, locale: 'id' });
+getWebchat().open();
+const off = getWebchat().on('unread_changed', ({ count }) => …);
+```
+
+- Stub antrean & loader yang SAMA dengan snippet: snippet + paket bersamaan = satu widget.
+- Loader disuntik setelah event `load` (kecuali `load: 'eager'`). Trusted Types: kebijakan `plasgos-webchat`.
+- `@plasgos/webchat/element` mendaftarkan `<plasgos-webchat widget-id identity-token locale hide-launcher>`;
+  atribut juga tersedia sebagai properti tercermin (`widgetId`, `identityToken`, `locale`) untuk Solid/React 19.
+  Versi CDN satu berkas: `dist/cdn/element.js` → `loader/v1/element.js`.
+- `pnpm --filter @plasgos/webchat smoke` mengimpor hasil build sebagai ESM & CJS di Node.
+
 ## Uji live terhadap api-crm
 
 `e2e-live/` menjalankan loader + aplikasi widget asli terhadap api-crm dev (REST, socket, inbox sungguhan) — tidak di

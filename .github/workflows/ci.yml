@@ -30,6 +30,8 @@ jobs:
       - run: pnpm build
       - name: Anggaran ukuran (loader ≤5 KB, aplikasi widget ≤60 KB gzip)
         run: pnpm size
+      - name: Paket npm dapat diimpor di Node (ESM & CJS, SSR)
+        run: pnpm --filter @plasgos/webchat smoke
 
   e2e:
     name: e2e fixture (${{ matrix.project }})
