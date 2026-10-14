@@ -66,6 +66,7 @@ function json(status: number, data: unknown): Response {
 }
 
 const sent: { url: string; body: unknown }[] = [];
+let appearance: Record<string, unknown> = {};
 
 function fakeServer(): void {
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => Promise.resolve(route(url, init))));
@@ -75,7 +76,8 @@ function route(url: string, init?: RequestInit): Response {
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
-        return json(200, { widget_id: WIDGET_ID, appearance: { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!' }, captcha: { mode: 'off', provider: null, site_key: null } });
+        const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
+        return json(200, { widget_id: WIDGET_ID, appearance: config, captcha: { mode: 'off', provider: null, site_key: null } });
     }
     if (url.endsWith('/sessions')) {
         return json(200, { access_token: 'akses', expires_in: 900, refresh_token: 'rt', visitor_id: 'vis_1', trust_level: 'anonymous', conversation: null });
@@ -113,6 +115,7 @@ async function startApp() {
 describe('aplikasi widget (iframe)', () => {
     beforeEach(() => {
         sent.length = 0;
+        appearance = {};
         socket.emitted.length = 0;
         socket.handlers.clear();
         socket.fake.connected = false;
@@ -135,6 +138,16 @@ describe('aplikasi widget (iframe)', () => {
         expect(last(port.frames)).toMatchObject({ state: 'launcher' });
         expect(document.documentElement.style.getPropertyValue('--pw-primary')).toBe('#1d4ed8');
         expect(localStorage.getItem(`plasgos_webchat:${WIDGET_ID}:refresh`)).toBe('rt');
+    });
+
+
+    it('pengaturan dashboard hide_launcher → bingkai tersembunyi saat tertutup; open() tetap membuka jendela', async () => {
+        appearance = { hide_launcher: true };
+        const { app, port } = await startApp();
+
+        expect(last(port.frames)).toMatchObject({ state: 'hidden' });
+        app.command({ name: 'open', args: [] });
+        expect(last(port.frames)).toMatchObject({ state: 'open' });
     });
 
 

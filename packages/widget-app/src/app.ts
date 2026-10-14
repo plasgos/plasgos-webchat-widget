@@ -656,7 +656,10 @@ export class WidgetApp {
 
     private render(state: AppState): void {
         const stopped = state.notice?.fatal === true && !state.open;
-        const launcherHidden = this.hideLauncher || state.config === null || stopped;
+        // Launcher disembunyikan oleh website (opsi `hideLauncher`) ATAU pengaturan tenant di dashboard
+        // (`appearance.hide_launcher`) — chat dibuka lewat tombol website sendiri (`Plasgos("open")`).
+        const hiddenBySettings = state.config?.appearance.hide_launcher === true;
+        const launcherHidden = this.hideLauncher || hiddenBySettings || state.config === null || stopped;
         const layout = frameLayout(state.open, state.config?.appearance ?? {}, this.viewport, launcherHidden);
         this.view.render(state, { fullscreen: this.viewport.width < MOBILE_BREAKPOINT, hideLauncher: layout.state === 'hidden' });
         const layoutKey = JSON.stringify(layout);
