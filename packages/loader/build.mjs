@@ -1,5 +1,11 @@
-// Bundel loader untuk CDN: satu berkas IIFE, ES2018, tanpa komentar lisensi pihak ketiga (tak ada dependensi).
+// Bundel loader untuk CDN: satu berkas IIFE, ES2018, tanpa dependensi.
+// Origin aplikasi widget ditanam per lingkungan: PLASGOS_WIDGET_ORIGIN (bawaan produksi).
 import { build } from 'esbuild';
+
+const widgetOrigin = process.env.PLASGOS_WIDGET_ORIGIN || 'https://widget.plasgoschat.com';
+if (!/^https?:\/\/[^/]+$/.test(widgetOrigin)) {
+    throw new Error(`PLASGOS_WIDGET_ORIGIN harus origin tanpa path, mis. https://widget.plasgoschat.com — dapat "${widgetOrigin}"`);
+}
 
 await build({
     entryPoints: ['src/index.ts'],
@@ -10,5 +16,6 @@ await build({
     minify: true,
     legalComments: 'none',
     sourcemap: 'linked',
+    define: { __WIDGET_ORIGIN__: JSON.stringify(widgetOrigin) },
     logLevel: 'info',
 });

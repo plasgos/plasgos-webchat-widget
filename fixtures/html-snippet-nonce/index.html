@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Toko Uji — beranda</title>
+    <!-- Snippet resmi (WEBCHAT_EMBED_COMPATIBILITY.md §3) dengan nonce; loader disuntik setelah `load`. Dipasang DUA KALI: meniru snippet + plugin
+         yang terpasang bersamaan — hasilnya tetap satu widget. ?widget=… &load=… mengatur skenario uji. -->
+    <script nonce="fixture-nonce">
+        (function (w, d) {
+            var params = new URLSearchParams(w.location.search);
+            var id = params.get('widget') || 'wgt_0123456789abcdef01234567';
+            if (!w.Plasgos) {
+                var q = function () { q.q.push(arguments); }; q.q = [];
+                w.Plasgos = q;
+                var load = function () {
+                    var s = d.createElement('script');
+                    s.async = true;
+                    s.src = '/packages/loader/dist/loader.js';
+                    s.setAttribute('data-widget-id', id);
+                    s.setAttribute('data-widget-origin', 'http://127.0.0.1:4400');
+                    d.head.appendChild(s);
+                };
+                if (d.readyState === 'complete') load(); else w.addEventListener('load', load);
+            }
+            w.Plasgos('boot', { widgetId: id, load: params.get('load') || 'idle' });
+        })(window, document);
+    </script>
+    <script nonce="fixture-nonce">
+        (function (w, d) {
+            var id = new URLSearchParams(w.location.search).get('widget') || 'wgt_0123456789abcdef01234567';
+            if (!w.Plasgos) {
+                var q = function () { q.q.push(arguments); }; q.q = [];
+                w.Plasgos = q;
+                var load = function () {
+                    var s = d.createElement('script');
+                    s.async = true;
+                    s.src = '/packages/loader/dist/loader.js';
+                    s.setAttribute('data-widget-id', id);
+                    d.head.appendChild(s);
+                };
+                if (d.readyState === 'complete') load(); else w.addEventListener('load', load);
+            }
+            w.Plasgos('boot', { widgetId: id });
+        })(window, document);
+    </script>
+</head>
+<body>
+    <main>
+        <h1 id="judul">Toko Uji</h1>
+        <p>Website tenant dengan CSP ketat: nonce, tanpa unsafe-inline, tanpa unsafe-eval.</p>
+        <button id="bantuan" type="button">Butuh bantuan?</button>
+        <nav><button id="ke-produk" type="button">Lihat produk</button></nav>
+    </main>
+    <script nonce="fixture-nonce">
+        document.getElementById('bantuan').addEventListener('click', function () { window.Plasgos('open'); });
+        document.getElementById('ke-produk').addEventListener('click', function () {
+            history.pushState({}, '', '/fixtures/html-snippet-nonce/produk');
+            document.title = 'Toko Uji — produk';
+            document.getElementById('judul').textContent = 'Produk';
+        });
+    </script>
+</body>
+</html>

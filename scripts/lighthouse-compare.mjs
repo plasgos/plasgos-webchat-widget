@@ -1,12 +1,17 @@
 // Bandingkan Lighthouse halaman fixture TANPA widget (baseline) dan DENGAN widget (candidate) — perf-budget.json.
 // Chrome dicari chrome-launcher (CHROME_PATH bila perlu). Hasil mentah disimpan di .lighthouse/.
+//
+// Throttling DITERAPKAN (`devtools`), bukan disimulasikan: simulasi lantern pada halaman sekecil fixture berderau
+// ±150 ms antar pengukuran halaman YANG SAMA — lebih besar dari ambang selisih. Satu putaran pemanasan per URL
+// dibuang (Chrome dingin), lalu median `runs` pengukuran.
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import * as chromeLauncher from 'chrome-launcher';
 import lighthouse from 'lighthouse';
 
-const PORT = Number(process.env.FIXTURE_PORT || 4401);
+// Port sama dengan e2e: fixture menanam origin widget http://127.0.0.1:4400 (CI menjalankan perf di job terpisah).
+const PORT = Number(process.env.FIXTURE_PORT || 4400);
 const budget = JSON.parse(await readFile(new URL('../perf-budget.json', import.meta.url), 'utf8'));
 const t = budget.thresholds;
 
@@ -15,10 +20,19 @@ await new Promise((resolve) => setTimeout(resolve, 800));
 const chrome = await chromeLauncher.launch({ chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu'] });
 
 const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+const LIGHTHOUSE_FLAGS = {
+    port: chrome.port,
+    onlyCategories: ['performance'],
+    logLevel: 'error',
+    output: 'json',
+    throttlingMethod: 'devtools',
+};
+
 async function measure(path) {
+    await lighthouse(`http://localhost:${PORT}${path}`, LIGHTHOUSE_FLAGS);
     const samples = [];
     for (let i = 0; i < budget.runs; i += 1) {
-        const result = await lighthouse(`http://localhost:${PORT}${path}`, { port: chrome.port, onlyCategories: ['performance'], logLevel: 'error', output: 'json' });
+        const result = await lighthouse(`http://localhost:${PORT}${path}`, LIGHTHOUSE_FLAGS);
         const audits = result.lhr.audits;
         samples.push({
             score: result.lhr.categories.performance.score,

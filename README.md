@@ -39,7 +39,25 @@ pnpm ci            # lint → typecheck → test → build → size → e2e
 ```
 
 Di mesin tanpa browser Playwright, pakai Chrome terpasang: `PW_CHROMIUM_CHANNEL=chrome pnpm e2e --project=chromium`.
+Firefox: `pnpm exec playwright install firefox`. WebKit/iPhone butuh dependensi sistem (`--with-deps`, dijalankan CI).
 Lighthouse mencari Chrome lewat `chrome-launcher` (`CHROME_PATH` bila perlu).
+
+### Origin aplikasi widget per lingkungan
+
+Loader TIDAK memanggil API; ia hanya membuat iframe `${origin widget}/w/${widgetId}`. Origin itu ditanam saat build:
+
+```bash
+PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.com pnpm build   # bawaan (produksi)
+PLASGOS_WIDGET_ORIGIN=https://widget.staging.example pnpm build   # lingkungan lain
+```
+
+Atribut `data-widget-origin` pada tag loader menimpanya (staging/uji).
+
+### Fixture & stub
+
+`fixtures/<nama>/index.html` = website tenant uji; `headers.json` di sampingnya = header yang dikirim server fixture
+(mis. CSP ketat). `fixtures/_widget-stub/` menjawab `/w/:widget_id` dari origin lain (`127.0.0.1`) dengan sisi iframe
+protokol v1 sampai aplikasi widget asli (W3c) dipakai di e2e.
 
 ## Anggaran yang dijaga CI
 
@@ -48,7 +66,7 @@ Lighthouse mencari Chrome lewat `chrome-launcher` (`CHROME_PATH` bila perlu).
 | Loader | ≤ 5 KB gzip | `size-budget.json` |
 | Aplikasi widget (muatan awal) | ≤ 60 KB gzip; sisanya dimuat malas | `size-budget.json` |
 | Skor performa Lighthouse fixture | ≥ 0,95 | `perf-budget.json` |
-| Selisih dengan vs tanpa widget | LCP ≤ +100 ms, CLS ≤ +0,01, TBT ≤ +50 ms (median 3 pengukuran) | `perf-budget.json` |
+| Selisih dengan vs tanpa widget | LCP ≤ +100 ms, CLS ≤ +0,01, TBT ≤ +50 ms — throttling diterapkan (`devtools`), pemanasan dibuang, median 5 | `perf-budget.json` |
 
 ## Versi & rilis
 

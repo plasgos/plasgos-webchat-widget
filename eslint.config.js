@@ -5,7 +5,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 const style = {
-    '@stylistic/indent': ['error', 4],
+    '@stylistic/indent': ['error', 4, { SwitchCase: 1 }],
     '@stylistic/quotes': ['error', 'single', { avoidEscape: true }],
     '@stylistic/semi': ['error', 'always'],
     '@stylistic/comma-dangle': ['error', 'always-multiline'],
@@ -39,6 +39,12 @@ export default tseslint.config(
             '@typescript-eslint/consistent-type-imports': 'error',
             '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
         },
+    },
+    {
+        // Fixture = website tenant & stub iframe uji: JavaScript peramban apa adanya (ES5, tanpa bundler).
+        files: ['fixtures/**/*.js'],
+        languageOptions: { globals: { ...globals.browser }, sourceType: 'script' },
+        rules: { '@stylistic/max-len': 'off' },
     },
     {
         files: ['**/test/**/*.ts', 'e2e/**/*.ts'],

@@ -29,6 +29,8 @@ createServer(async (req, res) => {
         res.writeHead(204).end();
         return;
     }
+    // Dokumen iframe widget (`/w/:widget_id`) — dilayani stub uji loader sampai aplikasi widget asli (W3c).
+    if (/^w\/wgt_[0-9a-f]{24}$/.test(path)) path = 'fixtures/_widget-stub/index.html';
     if (path.endsWith('/') || path === '') path += 'index.html';
     if (!SERVED.some((dir) => path.startsWith(`${dir}/`))) {
         res.writeHead(404).end('not found');

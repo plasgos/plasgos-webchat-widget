@@ -10,6 +10,9 @@
 
 export const PROTOCOL_VERSION = 1;
 
+/** Id publik widget (`wgt_` + 24 heksa) — sama dengan `WIDGET_ID_PATTERN` modul webchat api-crm. */
+export const WIDGET_ID_PATTERN = /^wgt_[0-9a-f]{24}$/;
+
 /** Perintah publik `Plasgos(name, ...)` yang diteruskan loader ke iframe. */
 export const HOST_COMMANDS = [
     'open',
@@ -44,6 +47,23 @@ export const FRAME_STATES = ['hidden', 'launcher', 'open'] as const;
 
 export type FrameState = (typeof FRAME_STATES)[number];
 
+export type Position = 'left' | 'right';
+
+/**
+ * Tata letak yang diminta aplikasi widget (ia yang tahu konfigurasi tampilan dari server). Loader menerapkannya pada
+ * elemen iframe; opsi `boot` dari tenant (posisi, offset, z-index) menimpa nilai dari server.
+ */
+export interface FrameLayout {
+    readonly state: FrameState;
+    readonly width: number;
+    readonly height: number;
+    readonly fullscreen: boolean;
+    readonly position: Position;
+    readonly offsetX: number;
+    readonly offsetY: number;
+    readonly zIndex: number | null;
+}
+
 export interface PageInfo {
     readonly url: string;
     readonly title: string;
@@ -67,7 +87,7 @@ export interface HostMessages {
 /** Pesan iframe → halaman tenant. */
 export interface WidgetMessages {
     'widget.ready': Record<string, never>;
-    'widget.frame': { readonly state: FrameState; readonly width: number; readonly height: number; readonly fullscreen: boolean };
+    'widget.frame': FrameLayout;
     'widget.event': { readonly name: WidgetEventName; readonly data: unknown };
     'widget.state': { readonly booted: boolean; readonly open: boolean; readonly unread: number; readonly trustLevel: string | null };
 }

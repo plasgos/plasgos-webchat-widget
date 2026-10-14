@@ -1,40 +1,42 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { COMMAND_KEY, GLOBAL_KEY, installGlobal } from '../src/global';
 
-function fakeWindow(): Window {
-    return {} as Window;
+type HostWindow = Window & Record<string, unknown>;
+
+function fakeWindow(): HostWindow {
+    return {} as HostWindow;
 }
 
-describe('singleton loader', () => {
-    it('mengambil alih antrean snippet yang terkumpul sebelum loader siap', () => {
-        const host = fakeWindow() as Window & Record<string, unknown>;
-        const stub = Object.assign((): void => undefined, { q: [['boot', { widgetId: 'wgt_1' }]] });
-        host[COMMAND_KEY] = stub;
+describe('singleton & antrean perintah', () => {
+    it('antrean snippet diputar ulang BERURUTAN ke handler', () => {
+        const host = fakeWindow();
+        host[COMMAND_KEY] = Object.assign((): void => undefined, { q: [['boot', { widgetId: 'wgt_1' }], ['open']] });
+        const handler = vi.fn();
 
-        const instance = installGlobal(host, 1);
+        installGlobal(host, 1, handler);
 
-        expect(instance.pending).toEqual([['boot', { widgetId: 'wgt_1' }]]);
+        expect(handler.mock.calls).toEqual([['boot', [{ widgetId: 'wgt_1' }]], ['open', []]]);
     });
 
 
-    it('dipasang dua kali (snippet ganda / HMR) tetap satu singleton', () => {
-        const host = fakeWindow() as Window & Record<string, unknown>;
+    it('dipasang dua kali (snippet ganda / plugin + snippet) tetap satu singleton; pemasangan kedua tak aktif', () => {
+        const host = fakeWindow();
+        const first = installGlobal(host, 1, vi.fn());
+        const second = installGlobal(host, 1, vi.fn());
 
-        const first = installGlobal(host, 1);
-        const second = installGlobal(host, 1);
-
-        expect(second).toBe(first);
-        expect(host[GLOBAL_KEY]).toBe(first);
+        expect(first.created).toBe(true);
+        expect(second.created).toBe(false);
+        expect(second.instance).toBe(first.instance);
+        expect(host[GLOBAL_KEY]).toBe(first.instance);
     });
 
 
-    it('panggilan Plasgos(...) setelah loader siap masuk ke singleton', () => {
-        const host = fakeWindow() as Window & Record<string, (...args: unknown[]) => void>;
-        const instance = installGlobal(host, 1);
+    it('Plasgos(...) setelah loader siap memanggil handler dan mengembalikan nilainya', () => {
+        const host = fakeWindow();
+        installGlobal(host, 1, (name) => (name === 'getState' ? { booted: true } : undefined));
+        const call = host[COMMAND_KEY] as (...args: unknown[]) => unknown;
 
-        host[COMMAND_KEY]?.('open');
-
-        expect(instance.pending).toEqual([['open']]);
+        expect(call('getState')).toEqual({ booted: true });
     });
 });

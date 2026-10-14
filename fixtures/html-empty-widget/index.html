@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fixture — HTML kosong (CSP ketat)</title>
+    <!-- Kembar `html-empty` + snippet resmi: pasangan Lighthouse dengan vs tanpa widget. Loader disuntik SETELAH
+         event `load` — permintaannya tak pernah berada di depan LCP halaman tenant. -->
+    <script nonce="fixture-nonce">
+        (function (w, d, id) {
+            if (w.Plasgos) return;
+            var q = function () { q.q.push(arguments); }; q.q = [];
+            w.Plasgos = q;
+            function load() {
+                var s = d.createElement('script');
+                s.async = true;
+                s.src = '/packages/loader/dist/loader.js';
+                s.setAttribute('data-widget-id', id);
+                s.setAttribute('data-widget-origin', 'http://127.0.0.1:4400');
+                d.head.appendChild(s);
+            }
+            if (d.readyState === 'complete') load(); else w.addEventListener('load', load);
+            w.Plasgos('boot', { widgetId: id });
+        })(window, document, 'wgt_0123456789abcdef01234567');
+    </script>
+</head>
+<body>
+    <main>
+        <h1>Website tenant tanpa widget</h1>
+        <p>Pembanding: halaman ini menjadi garis dasar CSP, aksesibilitas, dan Lighthouse.</p>
+    </main>
+</body>
+</html>
