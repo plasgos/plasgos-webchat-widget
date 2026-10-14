@@ -48,6 +48,12 @@ export const APPS: readonly FixtureApp[] = [
         start: 'pnpm --dir fixtures/apps/nuxt3 start',
         entries: [{ label: 'plugin .client + router', path: '/', link: '#ke-produk', target: '/produk' }],
     },
+    {
+        name: 'angular-ssr',
+        port: 4515,
+        start: 'pnpm --dir fixtures/apps/angular-ssr start',
+        entries: [{ label: 'SSR + hidrasi (zoneless)', path: '/', link: '#ke-produk', target: '/produk' }],
+    },
 ];
 
 /** `APPS=next15,nuxt3` membatasi aplikasi yang diuji (yang belum dibangun dilewati). */

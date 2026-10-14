@@ -18,7 +18,7 @@ const style = {
 export default tseslint.config(
     { ignores: ['**/dist/**', '**/node_modules/**', '**/.svelte-kit/**', 'coverage/**', 'test-results/**', 'playwright-report/**', '.lighthouse/**',
         // Keluaran build & berkas bangkitan aplikasi meta-framework (fixtures/apps).
-        '**/.next/**', '**/.nuxt/**', '**/.output/**', '**/.react-router/**', '**/.angular/**', 'fixtures/apps/*/build/**',
+        '**/.next/**', '**/.nuxt/**', '**/.output/**', '**/.react-router/**', '**/.angular/**', 'fixtures/apps/*/build/**', 'fixtures/apps/*/dist/**',
         'fixtures/apps/.packs/**', '**/next-env.d.ts'] },
     {
         files: ['**/*.{js,mjs}'],
