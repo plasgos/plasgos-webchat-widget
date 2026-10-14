@@ -127,6 +127,12 @@ lintas navigasi (tanpa handshake ulang).
 | `sveltekit` | 4516 | `@plasgos/webchat-svelte` di layout akar, `page` dari `$app/state` (SvelteKit 3: konfigurasi lewat plugin Vite) |
 | `astro` | 4517 | `loadWebchat` dalam `<script>` layout + View Transitions (`ClientRouter`) |
 
+## Rilis CDN
+
+Versi terkunci immutable + alias `v1` (5 menit), SRI di manifest & catatan rilis, rollback = pindah alias:
+`pnpm cdn plan | deploy | alias | status`. Prosedur, penyiapan AWS (S3 + CloudFront + OAC), dan CI:
+[docs/RELEASE.md](docs/RELEASE.md).
+
 ## Uji live terhadap api-crm
 
 `e2e-live/` menjalankan loader + aplikasi widget asli terhadap api-crm dev (REST, socket, inbox sungguhan) — tidak di

@@ -1,0 +1,67 @@
+name: release-cdn
+
+# Rilis CDN berversi (docs/RELEASE.md). Manual: pilih lingkungan & aksi. Kredensial AWS lewat OIDC (tanpa kunci
+# statis); nilai per lingkungan di variabel GitHub environment.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Lingkungan tujuan
+        type: choice
+        options: [staging, production]
+        required: true
+      action:
+        description: deploy = terbitkan versi package.json & pindah alias; canary = terbitkan tanpa pindah alias; alias = arahkan alias ke versi (rollback)
+        type: choice
+        options: [deploy, canary, alias]
+        required: true
+      version:
+        description: Versi tujuan (hanya untuk aksi alias)
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-cdn-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: ${{ inputs.action }} → ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      PLASGOS_WIDGET_ORIGIN: ${{ vars.PLASGOS_WIDGET_ORIGIN }}
+      PLASGOS_CDN_ORIGIN: ${{ vars.PLASGOS_CDN_ORIGIN }}
+      TARGET: s3://${{ vars.CDN_BUCKET }}
+      DISTRIBUTION: ${{ vars.CDN_DISTRIBUTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Build untuk origin lingkungan
+        if: inputs.action != 'alias'
+        run: pnpm build && pnpm size
+      - name: Deploy
+        if: inputs.action != 'alias'
+        run: |
+          mkdir -p release-notes
+          pnpm cdn deploy --target "$TARGET" --distribution "$DISTRIBUTION" --notes release-notes/notes.md ${{ inputs.action == 'canary' && '--no-alias' || '' }}
+          cat release-notes/notes.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Pindah alias
+        if: inputs.action == 'alias'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: pnpm cdn alias --target "$TARGET" --distribution "$DISTRIBUTION" --to "$VERSION"
+      - name: Status alias
+        run: pnpm cdn status --target "$TARGET" | tee -a "$GITHUB_STEP_SUMMARY"

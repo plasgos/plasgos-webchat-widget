@@ -1,5 +1,6 @@
 {
   "name": "plasgos-webchat-widget",
+  "version": "1.0.0",
   "private": true,
   "description": "Widget webchat Plasgos CRM: loader, aplikasi widget (iframe), paket npm, dan wrapper framework.",
   "license": "SEE LICENSE IN LICENSE",
@@ -20,7 +21,8 @@
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm size && pnpm e2e",
     "e2e:live": "playwright test -c playwright.live.config.ts",
     "e2e:apps": "playwright test -c playwright.apps.config.ts",
-    "apps:build": "node scripts/build-apps.mjs"
+    "apps:build": "node scripts/build-apps.mjs",
+    "cdn": "node scripts/cdn/cli.mjs"
   },
   "devDependencies": {
     "@angular/common": "22.2.2",

@@ -21,7 +21,7 @@ const appsIgnored = process.env['LINT_APPS'] === '1' ? [] : ['fixtures/apps/**']
 
 export default tseslint.config(
     { ignores: [...appsIgnored, '**/dist/**', '**/node_modules/**', '**/.svelte-kit/**', 'coverage/**', 'test-results/**',
-        'playwright-report/**', '.lighthouse/**',
+        'playwright-report/**', '.lighthouse/**', '.cdn-local/**',
         // Keluaran build & berkas bangkitan aplikasi meta-framework (fixtures/apps).
         '**/.next/**', '**/.nuxt/**', '**/.output/**', '**/.react-router/**', '**/.angular/**', 'fixtures/apps/*/build/**', 'fixtures/apps/*/dist/**', '**/.astro/**',
         'fixtures/apps/.packs/**', '**/next-env.d.ts'] },

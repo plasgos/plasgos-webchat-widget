@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fixture — loader versi terkunci + SRI dari CDN</title>
+    <!-- Website yang mewajibkan Subresource Integrity: loader versi terkunci dari CDN (origin lain) dengan
+         `integrity` dari manifest rilis (`/cdn/releases/<versi>.json`). `?tamper=1` = integritas salah → peramban
+         WAJIB menolak skrip. Bucket CDN lokal diisi `pnpm cdn deploy --target file://.cdn-local` (global setup e2e). -->
+    <script>
+        (async function () {
+            var params = new URLSearchParams(location.search);
+            var version = params.get('v') || '1.0.0';
+            var manifest = await (await fetch('/cdn/releases/' + version + '.json')).json();
+            var loader = manifest.files.find(function (file) { return file.key.endsWith('/loader.js'); });
+            var s = document.createElement('script');
+            s.async = true;
+            s.crossOrigin = 'anonymous';
+            s.integrity = params.get('tamper') ? 'sha384-' + 'A'.repeat(64) : loader.sri;
+            s.src = 'http://127.0.0.1:4400/cdn/' + loader.key;
+            s.setAttribute('data-widget-id', 'wgt_0123456789abcdef01234567');
+            s.setAttribute('data-widget-origin', 'http://127.0.0.1:4400');
+            s.setAttribute('data-auto-boot', 'true');
+            s.onerror = function () { document.body.setAttribute('data-loader', 'blocked'); };
+            s.onload = function () { document.body.setAttribute('data-loader', 'loaded'); };
+            document.head.appendChild(s);
+        })();
+    </script>
+</head>
+<body>
+    <main><h1>Toko dengan SRI</h1></main>
+</body>
+</html>
