@@ -16,6 +16,27 @@ export interface Appearance {
     readonly z_index?: number;
 }
 
+export type PrechatFieldType = 'text' | 'email' | 'phone' | 'select' | 'consent';
+
+export interface PrechatField {
+    readonly key: string;
+    readonly type: PrechatFieldType;
+    readonly label: string;
+    readonly required: boolean;
+    readonly options?: readonly { readonly value: string; readonly label: string }[];
+}
+
+/** Formulir perkenalan sebelum chat (W4b). `off` = tanpa formulir; `optional` = bisa dilewati. */
+export interface PrechatSettings {
+    readonly mode: 'off' | 'optional' | 'required';
+    readonly fields: readonly PrechatField[];
+}
+
+export interface PrivacySettings {
+    readonly consent_text: string | null;
+    readonly consent_version: string | null;
+}
+
 /** `required` = pengunjung wajib terverifikasi (identity token dari website) sebelum bisa mengirim pesan. */
 export interface IdentitySettings {
     readonly verification: 'off' | 'optional' | 'required';
@@ -25,6 +46,8 @@ export interface WidgetConfig {
     readonly widget_id: string;
     readonly appearance: Appearance;
     readonly identity?: IdentitySettings;
+    readonly prechat?: PrechatSettings;
+    readonly privacy?: PrivacySettings;
     readonly captcha: { readonly mode: string; readonly provider: 'turnstile' | null; readonly site_key: string | null };
 }
 
@@ -35,6 +58,13 @@ export interface Session {
     readonly visitor_id: string;
     readonly trust_level: string;
     readonly conversation: { readonly id: string } | null;
+    /** Formulir pre-chat sudah dikirim pengunjung ini (W4b). Server lama tak mengirimnya → dianggap belum. */
+    readonly prechat_completed?: boolean;
+}
+
+export interface PrechatResult {
+    readonly trust_level: string;
+    readonly prechat_completed: boolean;
 }
 
 export type MessageStatus = 'pending' | 'failed' | 'accepted' | 'sent' | 'delivered' | 'read' | 'unread';

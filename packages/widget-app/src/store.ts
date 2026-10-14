@@ -34,6 +34,11 @@ export interface AppState {
     readonly soundEnabled: boolean;
     readonly trustLevel: string | null;
     readonly conversationId: string | null;
+    /** Formulir pre-chat ditampilkan (belum dikirim / dilewati, pengunjung belum terverifikasi). */
+    readonly prechatPending: boolean;
+    readonly prechatBusy: boolean;
+    /** Kode galat kiriman formulir terakhir (ditampilkan di formulir), atau null. */
+    readonly prechatError: string | null;
 }
 
 export const INITIAL_STATE: AppState = {
@@ -50,6 +55,9 @@ export const INITIAL_STATE: AppState = {
     soundEnabled: true,
     trustLevel: null,
     conversationId: null,
+    prechatPending: false,
+    prechatBusy: false,
+    prechatError: null,
 };
 
 function rank(status: string | null): number {

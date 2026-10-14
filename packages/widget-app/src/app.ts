@@ -15,7 +15,8 @@ import { applyInboundStatus, INITIAL_STATE, lastServerTimestamp, Store, upsertMe
 import type { AppState } from './store';
 import { createTabChannel } from './tabs';
 import type { TabChannel } from './tabs';
-import type { ChatMessage, Locale, PageInfo } from './types';
+import type { ChatMessage, Locale, PageInfo, Session } from './types';
+import type { PrechatValues } from './ui/prechat';
 import { ChatView } from './ui/view';
 
 /** Jeda coba ulang antrean kirim saat jaringan/server bermasalah. */
@@ -167,6 +168,12 @@ export class WidgetApp {
             interact: () => {
                 this.sound.unlock();
             },
+            submitPrechat: (values) => {
+                void this.submitPrechat(values);
+            },
+            skipPrechat: () => {
+                this.skipPrechat();
+            },
         });
         this.view.mount(env.container);
         this.store.subscribe((state) => {
@@ -265,7 +272,14 @@ export class WidgetApp {
                 locale: this.store.get().locale,
                 ...(captchaToken ? { captcha_token: captchaToken } : {}),
             });
-            this.store.update({ trustLevel: session.trust_level, conversationId: session.conversation?.id ?? null, captchaSiteKey: null, notice: null, connection: 'connecting' });
+            this.store.update({
+                trustLevel: session.trust_level,
+                conversationId: session.conversation?.id ?? null,
+                captchaSiteKey: null,
+                notice: null,
+                connection: 'connecting',
+                prechatPending: this.needsPrechat(session),
+            });
             // Selalu dari catatan pengunjung di server — `session.conversation` masih null bila pesan terakhir baru
             // diterima (antre) saat halaman dimuat ulang.
             await this.syncHistory();
@@ -418,6 +432,9 @@ export class WidgetApp {
         }
         if (error instanceof ApiError && (error.code === 'conversation_limit_reached' || error.code === 'identity_required')) {
             this.store.update({ notice: { code: error.code, fatal: false } });
+        }
+        if (error instanceof ApiError && error.code === 'prechat_required') {
+            this.store.update({ notice: { code: error.code, fatal: false }, prechatPending: true });
         }
         return true;
     }
@@ -663,6 +680,49 @@ export class WidgetApp {
     }
 
 
+    /** Formulir pre-chat tampil: widget memintanya, belum dikirim, pengunjung belum terverifikasi, tak dilewati. */
+    private needsPrechat(session: Session): boolean {
+        const mode = this.store.get().config?.prechat?.mode ?? 'off';
+        if (mode === 'off' || session.prechat_completed === true || session.trust_level === 'verified') {
+            return false;
+        }
+        return !(mode === 'optional' && this.storage.get(this.keys.prechatSkipped) === session.visitor_id);
+    }
+
+
+    private async submitPrechat(values: PrechatValues): Promise<void> {
+        if (this.store.get().prechatBusy) {
+            return;
+        }
+        this.store.update({ prechatBusy: true, prechatError: null });
+        const consentVersion = this.store.get().config?.privacy?.consent_version ?? null;
+        const body = { fields: values, ...(consentVersion ? { consent_version: consentVersion } : {}) };
+        try {
+            const result = await this.session.withToken((token) => this.api.prechat(token, body));
+            this.store.update({
+                prechatPending: false, prechatBusy: false, trustLevel: result.trust_level, notice: null,
+            });
+            this.view.focusInput();
+        } catch (error) {
+            this.store.update({ prechatBusy: false, prechatError: error instanceof ApiError ? error.code : 'unknown' });
+            if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
+                this.fatal(error.code);
+            }
+        }
+    }
+
+
+    /** Mode `optional`: dilewati untuk pengunjung ini (diingat di storage iframe, tak ditanya lagi saat muat ulang). */
+    private skipPrechat(): void {
+        const visitorId = this.session.current?.visitor_id;
+        if (visitorId) {
+            this.storage.set(this.keys.prechatSkipped, visitorId);
+        }
+        this.store.update({ prechatPending: false });
+        this.view.focusInput();
+    }
+
+
     /**
      * Pengunjung terverifikasi (W4a): identity token dari server website → sesi `verified`. Token milik pengguna LAIN
      * dari yang sudah terverifikasi di sesi ini (`identity_mismatch`, mis. ganti akun tanpa logout) → sesi lama
@@ -678,7 +738,8 @@ export class WidgetApp {
         try {
             const session = await this.session.identify(identityToken);
             const conversationId = session.conversation?.id ?? this.store.get().conversationId;
-            this.store.update({ trustLevel: session.trust_level, conversationId });
+            // Pelanggan terverifikasi tak perlu memperkenalkan diri lagi.
+            this.store.update({ trustLevel: session.trust_level, conversationId, prechatPending: false });
             await this.syncHistory();
             this.realtime.reconnect();
         } catch (error) {
@@ -724,7 +785,9 @@ export class WidgetApp {
     private async shutdown(): Promise<void> {
         this.realtime.disconnect();
         await this.session.shutdown();
-        this.store.update({ messages: [], unread: 0, conversationId: null, trustLevel: null, open: false });
+        this.store.update({
+            messages: [], unread: 0, conversationId: null, trustLevel: null, open: false, prechatPending: false,
+        });
     }
 
 

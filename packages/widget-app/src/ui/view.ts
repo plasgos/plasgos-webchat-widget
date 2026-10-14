@@ -4,6 +4,8 @@ import { errorText, translate } from '../i18n';
 import { renderMarkdown } from '../markdown';
 import type { AppState } from '../store';
 import type { ChatMessage } from '../types';
+import { PrechatForm } from './prechat';
+import type { PrechatValues } from './prechat';
 import { STYLES } from './styles';
 
 export interface ViewActions {
@@ -14,6 +16,8 @@ export interface ViewActions {
     readonly typing: () => void;
     readonly toggleSound: () => void;
     readonly interact: () => void;
+    readonly submitPrechat: (values: PrechatValues) => void;
+    readonly skipPrechat: () => void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -76,6 +80,8 @@ export class ChatView {
 
     private readonly captcha: HTMLDivElement;
 
+    private readonly prechat: PrechatForm;
+
     private readonly input: HTMLTextAreaElement;
 
     private readonly sendButton: HTMLButtonElement;
@@ -118,6 +124,7 @@ export class ChatView {
         this.typingLine = this.element('div', 'pw-typing');
         this.typingLine.setAttribute('aria-live', 'polite');
         this.captcha = this.element('div', 'pw-captcha');
+        this.prechat = new PrechatForm(doc, { submit: actions.submitPrechat, skip: actions.skipPrechat });
 
         const composer = this.element('form', 'pw-composer');
         const label = this.element('label', 'pw-sr');
@@ -130,7 +137,9 @@ export class ChatView {
         this.sendButton.type = 'submit';
         this.sendButton.appendChild(this.icon(ICONS.send, 20));
         composer.append(label, this.input, this.sendButton);
-        this.window.append(header, this.notice, this.list, this.typingLine, this.captcha, composer);
+        this.window.append(
+            header, this.notice, this.list, this.typingLine, this.captcha, this.prechat.element, composer,
+        );
         this.root.append(this.launcher, this.window);
 
         this.bind(composer, label);
@@ -196,8 +205,17 @@ export class ChatView {
         this.captcha.hidden = state.captchaSiteKey === null;
         this.input.placeholder = t('inputPlaceholder');
         this.sendButton.setAttribute('aria-label', t('send'));
+        const prechat = state.config?.prechat;
+        this.prechat.render(state.prechatPending && prechat ? {
+            fields: prechat.fields,
+            optional: prechat.mode === 'optional',
+            consentText: state.config.privacy?.consent_text ?? null,
+            busy: state.prechatBusy,
+            failed: state.prechatError !== null,
+            t,
+        } : null);
         const blocked = state.notice?.fatal === true || state.captchaSiteKey !== null || state.config === null
-            || needsIdentity(state);
+            || needsIdentity(state) || state.prechatPending;
         this.input.disabled = blocked;
         this.sendButton.disabled = blocked;
     }

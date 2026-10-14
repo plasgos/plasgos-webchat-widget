@@ -68,6 +68,8 @@ function json(status: number, data: unknown): Response {
 const sent: { url: string; body: unknown }[] = [];
 let appearance: Record<string, unknown> = {};
 let identity: Record<string, unknown> | null = null;
+let prechatConfig: Record<string, unknown> | null = null;
+let prechatCompleted = false;
 /** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
 const identifyReplies: Response[] = [];
 
@@ -80,13 +82,16 @@ function route(url: string, init?: RequestInit): Response {
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
-        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+    }
+    if (url.endsWith('/prechat')) {
+        return json(200, { trust_level: 'contact_provided', prechat_completed: true });
     }
     if (url.endsWith('/sessions/identify')) {
         return identifyReplies.shift() ?? json(200, { access_token: 'akses-terverifikasi', expires_in: 900, refresh_token: 'rt-2', visitor_id: 'vis_1', trust_level: 'verified', conversation: null });
     }
     if (url.endsWith('/sessions')) {
-        return json(200, { access_token: 'akses', expires_in: 900, refresh_token: 'rt', visitor_id: 'vis_1', trust_level: 'anonymous', conversation: null });
+        return json(200, { access_token: 'akses', expires_in: 900, refresh_token: 'rt', visitor_id: 'vis_1', trust_level: 'anonymous', conversation: null, prechat_completed: prechatCompleted });
     }
     if (url.endsWith('/conversation')) {
         return json(200, { conversation: null, messages: [] });
@@ -123,6 +128,8 @@ describe('aplikasi widget (iframe)', () => {
         sent.length = 0;
         appearance = {};
         identity = null;
+        prechatConfig = null;
+        prechatCompleted = false;
         identifyReplies.length = 0;
         socket.emitted.length = 0;
         socket.handlers.clear();
@@ -211,12 +218,75 @@ describe('aplikasi widget (iframe)', () => {
     });
 
 
+    it('pre-chat wajib: formulir dari konfigurasi, validasi di peramban, kirim → kotak tulis terbuka', async () => {
+        prechatConfig = {
+            mode: 'required',
+            fields: [
+                { key: 'name', type: 'text', label: 'Nama', required: true },
+                { key: 'email', type: 'email', label: 'Email', required: false },
+                { key: 'topic', type: 'select', label: 'Topik', required: true, options: [{ value: 'sales', label: 'Pembelian' }] },
+                { key: 'consent', type: 'consent', label: 'Setuju', required: true },
+            ],
+        };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const form = container.querySelector('form.pw-prechat') as HTMLFormElement;
+        expect(form.hidden).toBe(false);
+        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+        expect((container.querySelector('.pw-prechat-skip') as HTMLButtonElement).hidden).toBe(true);
+        expect(container.querySelector('label[for="pw-prechat-consent"]')?.textContent).toBe('Saya setuju data saya dipakai.');
+
+        (container.querySelector('#pw-prechat-email') as HTMLInputElement).value = 'bukan-email';
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+        expect(container.querySelector('#pw-prechat-name-error')?.textContent).toBe('Wajib diisi.');
+        expect(container.querySelector('#pw-prechat-email-error')?.textContent).toBe('Alamat email tidak valid.');
+        expect(container.querySelector('#pw-prechat-consent-error')?.textContent).toBe('Persetujuan diperlukan untuk mulai chat.');
+        expect(sent.some((entry) => entry.url.endsWith('/prechat'))).toBe(false);
+
+        (container.querySelector('#pw-prechat-name') as HTMLInputElement).value = 'Sari';
+        (container.querySelector('#pw-prechat-email') as HTMLInputElement).value = 'sari@contoh.co.id';
+        (container.querySelector('#pw-prechat-topic') as HTMLSelectElement).value = 'sales';
+        (container.querySelector('#pw-prechat-consent') as HTMLInputElement).checked = true;
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+
+        expect(sent.find((entry) => entry.url.endsWith('/prechat'))?.body).toEqual({
+            fields: { name: 'Sari', email: 'sari@contoh.co.id', topic: 'sales', consent: true },
+            consent_version: 'v3',
+        });
+        expect(form.hidden).toBe(true);
+        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
+    });
+
+
+    it('pre-chat opsional bisa dilewati (diingat); sudah dikirim di tab lain → tak ditampilkan', async () => {
+        prechatConfig = { mode: 'optional', fields: [{ key: 'name', type: 'text', label: 'Nama', required: false }] };
+        const first = await startApp();
+        first.app.command({ name: 'open', args: [] });
+        (first.container.querySelector('.pw-prechat-skip') as HTMLButtonElement).click();
+        expect((first.container.querySelector('form.pw-prechat') as HTMLFormElement).hidden).toBe(true);
+        expect(localStorage.getItem(`plasgos_webchat:${WIDGET_ID}:prechat_skipped`)).toBe('vis_1');
+
+        document.body.replaceChildren();
+        const again = await startApp();
+        again.app.command({ name: 'open', args: [] });
+        expect((again.container.querySelector('form.pw-prechat') as HTMLFormElement).hidden).toBe(true);
+
+        prechatConfig = { mode: 'required', fields: [{ key: 'name', type: 'text', label: 'Nama', required: true }] };
+        prechatCompleted = true;
+        document.body.replaceChildren();
+        const done = await startApp();
+        done.app.command({ name: 'open', args: [] });
+        expect((done.container.querySelector('form.pw-prechat') as HTMLFormElement).hidden).toBe(true);
+    });
+
+
     it('kirim: pesan tampil seketika (mengirim…) lalu diterima server dengan id', async () => {
         const { app, container } = await startApp();
         app.command({ name: 'open', args: [] });
         const input = container.querySelector('textarea') as HTMLTextAreaElement;
         input.value = 'Ukuran M masih ada?';
-        (container.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit', { cancelable: true }));
+        (container.querySelector('form.pw-composer') as HTMLFormElement).dispatchEvent(new Event('submit', { cancelable: true }));
 
         expect(container.querySelector('.pw-msg[data-side="visitor"] .pw-bubble')?.textContent).toBe('Ukuran M masih ada?');
         await settle();

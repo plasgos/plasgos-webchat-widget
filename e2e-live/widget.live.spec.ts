@@ -232,6 +232,34 @@ test('pelanggan login di website: Plasgos("identify") → sesi widget terverifik
     }), { timeout: 15_000 }).toBe('verified');
 });
 
+test('pre-chat wajib: pengunjung mengisi formulir perkenalan + persetujuan lalu bisa bertanya', async ({ page }) => {
+    await tenant('PATCH', `/v2/webchat/widgets/${widgetId}`, {
+        prechat: {
+            mode: 'required',
+            fields: [
+                { key: 'name', type: 'text', label: 'Nama', required: true },
+                { key: 'email', type: 'email', label: 'Email', required: false },
+                { key: 'topic', type: 'select', label: 'Perlu bantuan soal', required: true, options: [{ value: 'sales', label: 'Pembelian' }] },
+                { key: 'consent', type: 'consent', label: 'Setuju', required: true },
+            ],
+        },
+        privacy: { consent_text: 'Saya setuju data saya dipakai untuk menjawab pertanyaan.', consent_version: 'e2e-1' },
+    });
+    const frame = await openStore(page);
+    await expect(frame.getByRole('textbox', { name: 'Pesan' })).toBeDisabled();
+
+    await frame.getByLabel('Nama *').fill('Sari E2E');
+    await frame.getByLabel('Email').fill(`sari.${String(Date.now())}@contoh.co.id`);
+    await frame.getByLabel('Perlu bantuan soal *').selectOption('sales');
+    await frame.getByLabel('Saya setuju data saya dipakai untuk menjawab pertanyaan.').check();
+    await frame.getByRole('button', { name: 'Mulai chat' }).click();
+
+    await expect(frame.locator('form.pw-prechat')).toBeHidden();
+    const question = `Setelah pre-chat ${String(Date.now())}`;
+    await send(frame, question);
+    await expect(visitorBubble(frame, question).locator('.pw-meta')).toContainText('Sampai', { timeout: 20_000 });
+});
+
 test('aksesibilitas: jendela chat tanpa pelanggaran axe serius/kritis (WCAG 2.1 A/AA)', async ({ page }) => {
     await openStore(page);
 

@@ -1,4 +1,4 @@
-import type { ConversationPage, PageInfo, SendResult, Session, WidgetConfig } from './types';
+import type { ConversationPage, PageInfo, PrechatResult, SendResult, Session, WidgetConfig } from './types';
 
 /**
  * Galat API publik dengan kode stabil (`error_code` server) — teks untuk pengunjung dipilih dari kode, bukan dari
@@ -43,6 +43,11 @@ export interface BootBody {
     readonly captcha_token?: string;
 }
 
+export interface PrechatBody {
+    readonly fields: Readonly<Record<string, string | boolean>>;
+    readonly consent_version?: string;
+}
+
 /** Klien REST `/webchat/v1` (origin sama dengan dokumen iframe → tanpa CORS, tanpa cookie). */
 export class PublicApi {
     public constructor(private readonly baseUrl: string, private readonly fetcher: FetchLike) {}
@@ -66,6 +71,12 @@ export class PublicApi {
     /** Naikkan sesi ke `verified` dengan identity token dari server website; refresh token ikut dirotasi. */
     public identify(token: string, identityToken: string): Promise<Session> {
         return this.request('POST', '/sessions/identify', { token, body: { identity_token: identityToken } });
+    }
+
+
+    /** Formulir pre-chat (W4b): isian + persetujuan → kontak diisi (tanpa penggabungan), sesi `contact_provided`. */
+    public prechat(token: string, body: PrechatBody): Promise<PrechatResult> {
+        return this.request('POST', '/prechat', { token, body });
     }
 
 

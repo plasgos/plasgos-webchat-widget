@@ -72,6 +72,13 @@ export function createStore(win: Window): KeyValueStore {
 }
 
 /** Kunci storage per widget — satu website bisa memasang lebih dari satu widget. */
-export function storageKeys(widgetId: string): { readonly refresh: string; readonly sound: string } {
-    return { refresh: `plasgos_webchat:${widgetId}:refresh`, sound: `plasgos_webchat:${widgetId}:sound` };
+export interface StorageKeys {
+    readonly refresh: string;
+    readonly sound: string;
+    readonly prechatSkipped: string;
+}
+
+export function storageKeys(widgetId: string): StorageKeys {
+    const prefix = `plasgos_webchat:${widgetId}`;
+    return { refresh: `${prefix}:refresh`, sound: `${prefix}:sound`, prechatSkipped: `${prefix}:prechat_skipped` };
 }
