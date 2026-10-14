@@ -226,6 +226,9 @@ export class WidgetApp {
             sendTranscript: (email) => {
                 void this.sendTranscript(email);
             },
+            requestHandoff: () => {
+                void this.requestHandoff();
+            },
         });
         this.view.mount(env.container);
         this.store.subscribe((state) => {
@@ -646,6 +649,9 @@ export class WidgetApp {
             case 'conversation.state':
                 this.store.update({ conversationStatus: (payload as Payload<'conversation.state'>).status });
                 break;
+            case 'conversation.handoff':
+                this.store.update({ handoffActive: (payload as Payload<'conversation.handoff'>).active });
+                break;
             case 'csat.updated':
                 this.store.update({ survey: (payload as Payload<'csat.updated'>).survey, surveyError: null });
                 break;
@@ -684,6 +690,7 @@ export class WidgetApp {
             conversationId: history.conversation?.id ?? state.conversationId,
             conversationStatus: history.conversation?.status ?? 'open',
             survey: history.survey === undefined ? state.survey : history.survey,
+            handoffActive: history.conversation?.handoff?.active ?? state.handoffActive,
         }));
     }
 
@@ -701,6 +708,30 @@ export class WidgetApp {
             this.store.update({ survey: result.survey, surveyBusy: false });
         } catch (error) {
             this.store.update({ surveyBusy: false, surveyError: error instanceof ApiError ? error.code : 'unknown' });
+            if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
+                this.fatal(error.code);
+            }
+        }
+    }
+
+
+    /* ── bicara dengan tim (W6c) ── */
+
+    private async requestHandoff(): Promise<void> {
+        const state = this.store.get();
+        if (state.handoffBusy || state.handoffActive) {
+            return;
+        }
+        this.store.update({ handoffBusy: true });
+        try {
+            const result = await this.session.withToken((token) => this.api.requestHandoff(token));
+            // Pesan sistem ("kami teruskan ke tim") datang lewat socket `message.created` seperti balasan biasa.
+            this.store.update({ handoffBusy: false, handoffActive: result.handoff.active });
+        } catch (error) {
+            const code = error instanceof ApiError ? error.code : 'unknown';
+            const seconds = error instanceof ApiError ? error.retryAfterSeconds : null;
+            const notice = { code, fatal: false, ...(seconds ? { vars: { seconds } } : {}) };
+            this.store.update({ handoffBusy: false, notice });
             if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
                 this.fatal(error.code);
             }
@@ -889,7 +920,7 @@ export class WidgetApp {
             this.session.clear();
             this.store.update({
                 messages: [], unread: 0, conversationId: null, trustLevel: null, emailOnFile: false,
-                conversationStatus: 'open', survey: null, transcript: null,
+                conversationStatus: 'open', survey: null, transcript: null, handoffActive: false, handoffBusy: false,
             });
         }
     }
@@ -1053,7 +1084,7 @@ export class WidgetApp {
         await this.session.shutdown();
         this.store.update({
             messages: [], unread: 0, conversationId: null, trustLevel: null, open: false, prechatPending: false,
-            emailOnFile: false, conversationStatus: 'open', survey: null, transcript: null,
+            emailOnFile: false, conversationStatus: 'open', survey: null, transcript: null, handoffActive: false, handoffBusy: false,
         });
     }
 

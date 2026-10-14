@@ -79,6 +79,8 @@ color:inherit}
 .pw-otp-entry{margin:0;padding:8px 14px;border:0;border-bottom:1px solid var(--pw-border);background:var(--pw-surface);
 color:var(--pw-primary);font:inherit;font-weight:600;text-align:left;cursor:pointer;text-decoration:underline}
 .pw-otp-entry[hidden],.pw-otp[hidden]{display:none}
+.pw-handoff{border-bottom:0;border-top:1px solid var(--pw-border)}
+.pw-handoff:disabled{opacity:.6;cursor:progress}
 .pw-otp{padding:14px 16px;border-top:1px solid var(--pw-border);background:var(--pw-bg);display:flex;flex-direction:column;gap:8px}
 .pw-otp-title{margin:0;font-weight:600}
 .pw-otp-hint{margin:0;font-size:12.5px;color:var(--pw-muted)}

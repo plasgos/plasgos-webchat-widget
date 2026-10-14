@@ -76,6 +76,8 @@ let hours: { business_hours: unknown; availability: unknown; offline: unknown } 
 let emailOnFile = false;
 /** Jawaban `GET /conversation` (W5c); null = tanpa percakapan. */
 let history: Record<string, unknown> | null = null;
+/** `ai.enabled` di konfigurasi (W6c); null = server lama (tanpa kolom). */
+let aiEnabled: boolean | null = null;
 /** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
 const identifyReplies: Response[] = [];
 
@@ -88,7 +90,7 @@ function route(url: string, init?: RequestInit): Response {
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
-        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(aiEnabled === null ? {} : { ai: { enabled: aiEnabled } }), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
     }
     if (url.endsWith('/otp/request')) {
         return json(200, { sent: true, expires_in: 600 });
@@ -119,6 +121,9 @@ function route(url: string, init?: RequestInit): Response {
         const payload = body as { score?: number; comment?: string };
         const survey = { status: 'answered', scale: 5, score: payload.score ?? 4, satisfied: true, comment: payload.comment ?? null, comment_allowed: !payload.comment, sent_at: null, expires_at: null, answered_at: '2026-10-15T03:00:00.000Z' };
         return json(200, { survey });
+    }
+    if (url.endsWith('/handoff')) {
+        return json(200, { handoff: { active: true, already: false } });
     }
     if (url.endsWith('/transcript')) {
         return json(202, { sent: true, email_on_file: true });
@@ -161,6 +166,7 @@ describe('aplikasi widget (iframe)', () => {
         hours = null;
         emailOnFile = false;
         history = null;
+        aiEnabled = null;
         identifyReplies.length = 0;
         socket.emitted.length = 0;
         socket.handlers.clear();
@@ -507,6 +513,48 @@ describe('aplikasi widget (iframe)', () => {
         await settle();
         expect(sent.find((entry) => entry.url.endsWith('/transcript'))?.body).toEqual({ email: 'pembeli@example.com' });
         expect(panel.textContent).toContain('Transkrip dikirim. Periksa email Anda.');
+    });
+
+
+    it('bicara dengan tim: tombol hanya bila AI menyala & ada percakapan → POST /handoff → tombol hilang; socket & riwayat ikut', async () => {
+        aiEnabled = true;
+        const first = await startApp();
+        first.app.command({ name: 'open', args: [] });
+        expect((first.container.querySelector('.pw-handoff') as HTMLButtonElement).hidden).toBe(true);
+
+        document.body.replaceChildren();
+        history = { conversation: { id: 'cv_1', status: 'open', resolved_at: null, handoff: { active: false } }, survey: null, messages: [] };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const button = container.querySelector('.pw-handoff') as HTMLButtonElement;
+        expect(button.hidden).toBe(false);
+        expect(button.textContent).toBe('Bicara dengan tim');
+        button.click();
+        await settle();
+        expect(sent.find((entry) => entry.url.endsWith('/handoff'))?.body).toEqual({});
+        expect(button.hidden).toBe(true);
+
+        document.body.replaceChildren();
+        history = { conversation: { id: 'cv_1', status: 'open', resolved_at: null, handoff: { active: true } }, survey: null, messages: [] };
+        const resumed = await startApp();
+        resumed.app.command({ name: 'open', args: [] });
+        expect((resumed.container.querySelector('.pw-handoff') as HTMLButtonElement).hidden, 'riwayat: sudah diteruskan').toBe(true);
+
+        document.body.replaceChildren();
+        history = { conversation: { id: 'cv_1', status: 'open', resolved_at: null }, survey: null, messages: [] };
+        const live = await startApp();
+        live.app.command({ name: 'open', args: [] });
+        expect((live.container.querySelector('.pw-handoff') as HTMLButtonElement).hidden).toBe(false);
+        socket.serverEmit('conversation.handoff', { conversation_id: 'cv_1', active: true, reason: 'visitor_hourly_limit', at: '2026-10-15T03:00:00.000Z' });
+        expect((live.container.querySelector('.pw-handoff') as HTMLButtonElement).hidden).toBe(true);
+    });
+
+
+    it('bicara dengan tim: AI mati / server lama → tanpa tombol', async () => {
+        history = { conversation: { id: 'cv_1', status: 'open', resolved_at: null }, survey: null, messages: [] };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        expect((container.querySelector('.pw-handoff') as HTMLButtonElement).hidden).toBe(true);
     });
 
 

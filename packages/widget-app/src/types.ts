@@ -83,6 +83,8 @@ export interface WidgetConfig {
     /** Server lama tak mengirimnya → dianggap selalu buka. */
     readonly business_hours?: BusinessHours | null;
     readonly availability?: Availability | null;
+    /** AI menjawab lebih dulu di widget ini (W6c) → tombol "Bicara dengan tim". Server lama tak mengirimnya. */
+    readonly ai?: { readonly enabled: boolean };
     readonly captcha: { readonly mode: string; readonly provider: 'turnstile' | null; readonly site_key: string | null };
 }
 
@@ -141,6 +143,8 @@ export interface ConversationRef {
     /** Server lama tak mengirimnya → dianggap `open`. */
     readonly status?: ConversationStatus;
     readonly resolved_at?: string | null;
+    /** Percakapan sudah diteruskan ke tim — AI berhenti menjawab (W6c). Server lama tak mengirimnya. */
+    readonly handoff?: { readonly active: boolean };
 }
 
 export interface ChatMessage {
@@ -179,6 +183,11 @@ export interface ConversationPage {
 export interface TranscriptResult {
     readonly sent: boolean;
     readonly email_on_file: boolean;
+}
+
+/** `POST /handoff` (W6c); `already` = permintaan sebelumnya masih berlaku (tanpa pesan sistem baru). */
+export interface HandoffResult {
+    readonly handoff: { readonly active: boolean; readonly already: boolean };
 }
 
 export interface PageInfo {

@@ -62,6 +62,9 @@ export interface AppState {
     readonly surveyError: string | null;
     /** Panel transkrip: null = tertutup. */
     readonly transcript: TranscriptState | null;
+    /** Percakapan sudah diteruskan ke tim (W6c) — tombol "Bicara dengan tim" disembunyikan. */
+    readonly handoffActive: boolean;
+    readonly handoffBusy: boolean;
 }
 
 export interface TranscriptState {
@@ -108,6 +111,8 @@ export const INITIAL_STATE: AppState = {
     surveyBusy: false,
     surveyError: null,
     transcript: null,
+    handoffActive: false,
+    handoffBusy: false,
 };
 
 /**
@@ -126,6 +131,15 @@ export function needsOfflineForm(state: AppState): boolean {
     const mode = state.config?.offline?.mode ?? 'form';
     return availabilityOf(state) !== 'open' && mode !== 'hidden' && !state.emailOnFile
         && state.config?.availability !== undefined && state.config.availability !== null;
+}
+
+/**
+ * Tombol "Bicara dengan tim" (W6c): hanya bila AI yang menjawab di widget ini, percakapan sudah ada (server butuh
+ * percakapan untuk diteruskan), belum diteruskan, dan formulir offline tak sedang menggantikan kolom tulis.
+ */
+export function handoffOffered(state: AppState): boolean {
+    return state.config?.ai?.enabled === true && state.conversationId !== null
+        && !state.handoffActive && !needsOfflineForm(state);
 }
 
 function rank(status: string | null): number {

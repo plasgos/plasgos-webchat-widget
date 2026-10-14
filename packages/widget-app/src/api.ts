@@ -1,6 +1,6 @@
 import type {
     ConversationPage, CustomerSurvey, OfflineMessageResult, OtpRequestResult, PageInfo, PrechatResult, SendResult,
-    Session, TranscriptResult, WidgetConfig,
+    HandoffResult, Session, TranscriptResult, WidgetConfig,
 } from './types';
 
 /**
@@ -132,6 +132,12 @@ export class PublicApi {
     /** Transkrip percakapan ke email (W5c); `email` wajib bila alamat belum diketahui. */
     public requestTranscript(token: string, body: { email?: string }): Promise<TranscriptResult> {
         return this.request('POST', '/transcript', { token, body });
+    }
+
+
+    /** Pengunjung minta bicara dengan tim (W6c): AI berhenti, tim diberi tahu, pesan sistem masuk percakapan. */
+    public requestHandoff(token: string): Promise<HandoffResult> {
+        return this.request('POST', '/handoff', { token, body: {} });
     }
 
 

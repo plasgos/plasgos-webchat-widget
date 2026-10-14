@@ -23,6 +23,8 @@ export interface ServerEvents {
     'conversation.state': (payload: { conversation_id: string; status: ConversationStatus; resolved_at: string | null }) => void;
     /** Survei kepuasan dikirim / dijawab (semua tab pengunjung, W5c). */
     'csat.updated': (payload: { conversation_id: string; survey: CustomerSurvey | null }) => void;
+    /** Percakapan diteruskan ke tim — dari tombol pengunjung atau batas AI tercapai (W6c). */
+    'conversation.handoff': (payload: { conversation_id: string; active: boolean; reason: string; at: string }) => void;
 }
 
 /** Event widget → server; balasan lewat ack. */
@@ -101,7 +103,7 @@ export class Realtime {
         });
         const events = [
             'message.created', 'message.status', 'typing', 'session.refresh_required', 'session.revoked', 'team.presence',
-            'conversation.state', 'csat.updated',
+            'conversation.state', 'csat.updated', 'conversation.handoff',
         ] as const;
         for (const name of events) {
             socket.on(name, ((payload: never) => {

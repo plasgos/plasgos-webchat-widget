@@ -2,7 +2,7 @@ import { safeColor, textOn } from '../colors';
 import type { MessageKey } from '../i18n';
 import { errorText, formatNextOpen, replyEstimateText, translate } from '../i18n';
 import { renderMarkdown } from '../markdown';
-import { availabilityOf, needsOfflineForm } from '../store';
+import { availabilityOf, handoffOffered, needsOfflineForm } from '../store';
 import type { AppState } from '../store';
 import type { ChatMessage } from '../types';
 import { OfflineForm } from './offline';
@@ -34,6 +34,7 @@ export interface ViewActions {
     readonly openTranscript: () => void;
     readonly closeTranscript: () => void;
     readonly sendTranscript: (email: string | null) => void;
+    readonly requestHandoff: () => void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -141,6 +142,8 @@ export class ChatView {
 
     private readonly otpEntry: HTMLButtonElement;
 
+    private readonly handoffEntry: HTMLButtonElement;
+
     private readonly offline: OfflineForm;
 
     private readonly transcript: TranscriptPanel;
@@ -206,6 +209,13 @@ export class ChatView {
             actions.openOtp();
         });
 
+        // "Bicara dengan tim" (W6c) — di atas kolom tulis, hanya selama AI yang menjawab.
+        this.handoffEntry = this.element('button', 'pw-otp-entry pw-handoff');
+        this.handoffEntry.type = 'button';
+        this.handoffEntry.addEventListener('click', () => {
+            actions.requestHandoff();
+        });
+
         const composer = this.element('form', 'pw-composer');
         const label = this.element('label', 'pw-sr');
         label.htmlFor = 'pw-input';
@@ -219,7 +229,7 @@ export class ChatView {
         composer.append(label, this.input, this.sendButton);
         this.window.append(
             header, this.notice, this.otpEntry, this.list, this.typingLine, this.captcha, this.prechat.element,
-            this.otp.element, this.offline.element, this.transcript.element, composer,
+            this.otp.element, this.offline.element, this.transcript.element, this.handoffEntry, composer,
         );
         this.root.append(this.launcher, this.window);
 
@@ -330,6 +340,9 @@ export class ChatView {
         const otpAllowed = needsIdentity(state) && state.config?.identity?.otp_email !== false;
         this.otpEntry.hidden = !otpAllowed || state.otp !== null;
         this.otpEntry.textContent = t('otpEntry');
+        this.handoffEntry.hidden = !handoffOffered(state);
+        this.handoffEntry.disabled = state.handoffBusy;
+        this.handoffEntry.textContent = t(state.handoffBusy ? 'handoffBusy' : 'handoffOpen');
         this.otp.render(state.otp ? {
             step: state.otp.step,
             email: state.otp.email,
