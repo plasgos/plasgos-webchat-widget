@@ -50,6 +50,8 @@ export interface WidgetConfig {
     readonly identity?: IdentitySettings;
     readonly prechat?: PrechatSettings;
     readonly privacy?: PrivacySettings;
+    /** Status tim saat konfigurasi dibaca (W5a); perubahan berikutnya lewat socket `team.presence`. */
+    readonly team?: { readonly online: boolean | null } | null;
     readonly captcha: { readonly mode: string; readonly provider: 'turnstile' | null; readonly site_key: string | null };
 }
 

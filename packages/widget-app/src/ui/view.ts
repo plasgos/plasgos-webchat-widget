@@ -79,6 +79,8 @@ export class ChatView {
 
     private readonly greeting: HTMLParagraphElement;
 
+    private readonly teamStatus: HTMLParagraphElement;
+
     private readonly logo: HTMLImageElement;
 
     private readonly soundButton: HTMLButtonElement;
@@ -128,7 +130,9 @@ export class ChatView {
         this.title = this.element('h2', 'pw-title');
         this.title.id = 'pw-title';
         this.greeting = this.element('p', 'pw-greeting');
-        headText.append(this.title, this.greeting);
+        this.teamStatus = this.element('p', 'pw-team-status');
+        this.teamStatus.setAttribute('aria-live', 'polite');
+        headText.append(this.title, this.teamStatus, this.greeting);
         this.soundButton = this.iconButton(ICONS.soundOn);
         this.closeButton = this.iconButton(ICONS.close);
         header.append(this.logo, headText, this.soundButton, this.closeButton);
@@ -219,6 +223,9 @@ export class ChatView {
         this.title.textContent = look.team_title ?? t('defaultTitle');
         this.greeting.textContent = look.greeting ?? '';
         this.greeting.hidden = !look.greeting;
+        this.teamStatus.hidden = state.teamOnline === null;
+        this.teamStatus.dataset['online'] = String(state.teamOnline === true);
+        this.teamStatus.textContent = state.teamOnline === null ? '' : t(state.teamOnline ? 'teamOnline' : 'teamOffline');
         this.logo.hidden = !look.logo_url;
         if (look.logo_url && this.logo.src !== look.logo_url) {
             this.logo.src = look.logo_url;

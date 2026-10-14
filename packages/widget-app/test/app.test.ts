@@ -70,6 +70,7 @@ let appearance: Record<string, unknown> = {};
 let identity: Record<string, unknown> | null = null;
 let prechatConfig: Record<string, unknown> | null = null;
 let prechatCompleted = false;
+let teamOnline: boolean | null = null;
 /** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
 const identifyReplies: Response[] = [];
 
@@ -82,7 +83,7 @@ function route(url: string, init?: RequestInit): Response {
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
-        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
     }
     if (url.endsWith('/otp/request')) {
         return json(200, { sent: true, expires_in: 600 });
@@ -139,6 +140,7 @@ describe('aplikasi widget (iframe)', () => {
         identity = null;
         prechatConfig = null;
         prechatCompleted = false;
+        teamOnline = null;
         identifyReplies.length = 0;
         socket.emitted.length = 0;
         socket.handlers.clear();
@@ -321,6 +323,23 @@ describe('aplikasi widget (iframe)', () => {
         expect(panel.hidden).toBe(true);
         expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
         expect(localStorage.getItem(`plasgos_webchat:${WIDGET_ID}:refresh`)).toBe('rt-otp');
+    });
+
+
+    it('status tim: dari konfigurasi lalu diperbarui socket team.presence; tak diketahui → tak ditampilkan', async () => {
+        teamOnline = false;
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const status = container.querySelector('.pw-team-status') as HTMLParagraphElement;
+        expect(status.hidden).toBe(false);
+        expect(status.textContent).toBe('Tim sedang offline — kami balas secepatnya');
+
+        socket.serverEmit('team.presence', { online: true, at: '2026-10-14T10:00:00.000Z' });
+        expect(status.textContent).toBe('Tim sedang online');
+        expect(status.dataset['online']).toBe('true');
+
+        socket.serverEmit('team.presence', { online: null, at: '2026-10-14T10:01:00.000Z' });
+        expect(status.hidden).toBe(true);
     });
 
 

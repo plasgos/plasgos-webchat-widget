@@ -17,6 +17,8 @@ export interface ServerEvents {
     typing: (payload: { conversation_id: string; typing: boolean; expires_at: string | null }) => void;
     'session.refresh_required': (payload: { reason: string; expires_at: string }) => void;
     'session.revoked': (payload: { reason: string }) => void;
+    /** Ada agen siap melayani (W5a); `online: null` = tak diketahui. */
+    'team.presence': (payload: { online: boolean | null; at: string }) => void;
 }
 
 /** Event widget → server; balasan lewat ack. */
@@ -93,7 +95,8 @@ export class Realtime {
                 this.handlers.onTokenStale();
             }
         });
-        for (const name of ['message.created', 'message.status', 'typing', 'session.refresh_required', 'session.revoked'] as const) {
+        const events = ['message.created', 'message.status', 'typing', 'session.refresh_required', 'session.revoked', 'team.presence'] as const;
+        for (const name of events) {
             socket.on(name, ((payload: never) => {
                 this.handlers.onEvent(name, payload);
             }) as never);

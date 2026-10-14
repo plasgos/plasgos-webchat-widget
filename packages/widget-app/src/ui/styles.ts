@@ -82,5 +82,9 @@ color:var(--pw-primary);font:inherit;font-weight:600;text-align:left;cursor:poin
 .pw-otp{padding:14px 16px;border-top:1px solid var(--pw-border);background:var(--pw-bg);display:flex;flex-direction:column;gap:8px}
 .pw-otp-title{margin:0;font-weight:600}
 .pw-otp-hint{margin:0;font-size:12.5px;color:var(--pw-muted)}
+.pw-team-status{margin:2px 0 0;font-size:12px;display:flex;align-items:center;gap:6px}
+.pw-team-status[hidden]{display:none}
+.pw-team-status::before{content:"";width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.55)}
+.pw-team-status[data-online="true"]::before{background:#22c55e;box-shadow:0 0 0 2px rgba(255,255,255,.6)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 `;

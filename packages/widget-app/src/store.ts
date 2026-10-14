@@ -41,6 +41,8 @@ export interface AppState {
     readonly prechatError: string | null;
     /** Panel verifikasi email (W4c): null = tertutup. */
     readonly otp: OtpState | null;
+    /** Ada agen siap melayani: true/false; null = tak diketahui (tak ditampilkan). */
+    readonly teamOnline: boolean | null;
 }
 
 export interface OtpState {
@@ -68,6 +70,7 @@ export const INITIAL_STATE: AppState = {
     prechatBusy: false,
     prechatError: null,
     otp: null,
+    teamOnline: null,
 };
 
 function rank(status: string | null): number {

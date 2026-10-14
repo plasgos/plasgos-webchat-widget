@@ -288,7 +288,11 @@ export class WidgetApp {
         try {
             if (!this.store.get().config) {
                 const config = await this.api.config(this.env.widgetId);
-                this.store.update({ config, locale: resolveLocale(this.preferredLocale, config.appearance.locale_default ?? 'id') });
+                this.store.update({
+                    config,
+                    locale: resolveLocale(this.preferredLocale, config.appearance.locale_default ?? 'id'),
+                    teamOnline: config.team?.online ?? null,
+                });
             }
             const session = await this.session.start({
                 page_origin: this.hostOrigin,
@@ -507,6 +511,9 @@ export class WidgetApp {
             case 'session.revoked':
                 this.session.clear();
                 this.fatal('session_revoked');
+                break;
+            case 'team.presence':
+                this.store.update({ teamOnline: (payload as Payload<'team.presence'>).online });
                 break;
         }
     }
