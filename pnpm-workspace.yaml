@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+
+# esbuild memasang biner platformnya lewat skrip instal.
+onlyBuiltDependencies:
+  - esbuild

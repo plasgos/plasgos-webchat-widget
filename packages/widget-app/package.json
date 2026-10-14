@@ -1,0 +1,15 @@
+{
+  "name": "@plasgos/webchat-widget-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aplikasi widget webchat di dalam iframe (CDN `widget-app/v1/app.js`, dimuat dokumen `/w/:widget_id` api-crm).",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@plasgos/webchat-protocol": "workspace:*"
+  }
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+test-results/
+playwright-report/
+.lighthouse/
+npm-debug.log*
+pnpm-debug.log*
+*.tgz
+
+.DS_Store
+.idea/
+.vscode/

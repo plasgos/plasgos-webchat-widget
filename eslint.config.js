@@ -1,0 +1,47 @@
+// Gaya & mutu kode repo widget: TypeScript strict tanpa `any`, 4 spasi, kutip tunggal, titik koma, ≤120 kolom.
+import js from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
+
+const style = {
+    '@stylistic/indent': ['error', 4],
+    '@stylistic/quotes': ['error', 'single', { avoidEscape: true }],
+    '@stylistic/semi': ['error', 'always'],
+    '@stylistic/comma-dangle': ['error', 'always-multiline'],
+    '@stylistic/no-trailing-spaces': 'error',
+    '@stylistic/eol-last': ['error', 'always'],
+    '@stylistic/max-len': ['error', { code: 120, ignoreUrls: true, ignoreStrings: true, ignoreTemplateLiterals: true }],
+    'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
+};
+
+export default tseslint.config(
+    { ignores: ['**/dist/**', '**/node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**', '.lighthouse/**'] },
+    {
+        files: ['**/*.{js,mjs}'],
+        extends: [js.configs.recommended],
+        plugins: { '@stylistic': stylistic },
+        languageOptions: { globals: { ...globals.node } },
+        rules: style,
+    },
+    {
+        files: ['**/*.ts'],
+        extends: [js.configs.recommended, ...tseslint.configs.strictTypeChecked],
+        plugins: { '@stylistic': stylistic },
+        languageOptions: {
+            parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+            globals: { ...globals.browser },
+        },
+        rules: {
+            ...style,
+            '@typescript-eslint/no-explicit-any': 'error',
+            '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }],
+            '@typescript-eslint/consistent-type-imports': 'error',
+            '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+        },
+    },
+    {
+        files: ['**/test/**/*.ts', 'e2e/**/*.ts'],
+        rules: { '@typescript-eslint/explicit-function-return-type': 'off' },
+    },
+);

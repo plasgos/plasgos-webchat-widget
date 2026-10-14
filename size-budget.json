@@ -1,0 +1,7 @@
+{
+  "$comment": "Anggaran ukuran (gzip) — WEBCHAT_EMBED_COMPATIBILITY.md §7. Melewati batas = CI merah.",
+  "budgets": [
+    { "file": "packages/loader/dist/loader.js", "maxGzipBytes": 5120, "label": "loader" },
+    { "file": "packages/widget-app/dist/app.js", "maxGzipBytes": 61440, "label": "aplikasi widget (awal)" }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "$comment": "Ambang Lighthouse (W3a): widget tak boleh menurunkan LCP/CLS/TBT halaman tenant melewati selisih ini dibanding halaman yang sama tanpa widget. Median dari `runs` kali pengukuran.",
+  "runs": 3,
+  "thresholds": {
+    "minPerformanceScore": 0.95,
+    "maxLcpDeltaMs": 100,
+    "maxClsDelta": 0.01,
+    "maxTbtDeltaMs": 50
+  },
+  "pairs": [
+    { "label": "garis dasar (fixture kosong vs dirinya sendiri — W3b menambah pasangan dengan loader)", "baseline": "/fixtures/html-empty/", "candidate": "/fixtures/html-empty/" }
+  ]
+}
