@@ -16,10 +16,11 @@
     /** `undefined` eksplisit diterima: di template, `identityToken={sesi?.token}` adalah pola yang umum. */
     interface Props extends Omit<WebchatOptions, 'identityToken'> {
         readonly identityToken?: string | undefined;
-        readonly pathname?: string | undefined;
+        readonly pathname?: string | null | undefined;
     }
 
-    const { identityToken, pathname, ...widget }: Props = $props();
+    const { identityToken, pathname: rawPathname, ...widget }: Props = $props();
+    const pathname = $derived(rawPathname ?? undefined);
 
     let previousToken: string | undefined = undefined;
     // Nilai AWAL sengaja (pembanding navigasi berikutnya).

@@ -19,7 +19,8 @@ export interface PlasgosWebchatProps extends WebchatOptions {
      * Path halaman saat ini (Next `usePathname()`, React Router `useLocation().pathname`) — dilaporkan sebagai
      * navigasi bila berubah. Opsional: loader juga mendeteksi navigasi SPA sendiri.
      */
-    readonly pathname?: string;
+    /** `null` diterima (Next `usePathname()` bertipe `string | null`) dan diperlakukan seperti tidak diberikan. */
+    readonly pathname?: string | null;
 }
 
 const EMPTY_STATE: WebchatState = { booted: false, open: false, unread: 0, trustLevel: null };
@@ -27,7 +28,8 @@ const STATE_EVENTS = ['ready', 'open', 'close', 'unread_changed', 'error'] as co
 
 /** Nyalakan widget. Logout (identityToken dari ada → tak ada) = shutdown lalu sesi anonim baru. */
 export function PlasgosWebchat(props: PlasgosWebchatProps): null {
-    const { identityToken, pathname, ...widget } = props;
+    const { identityToken, pathname: rawPathname, ...widget } = props;
+    const pathname = rawPathname ?? undefined;
     // `pathname` = aplikasi yang melaporkan navigasi → deteksi otomatis loader dimatikan (tanpa laporan ganda).
     const options: WebchatOptions = pathname === undefined ? widget : { autoPageTracking: false, ...widget };
     const optionsKey = JSON.stringify(options);

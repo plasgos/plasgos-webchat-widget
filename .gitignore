@@ -13,3 +13,12 @@ pnpm-debug.log*
 .idea/
 .vscode/
 .svelte-kit/
+fixtures/apps/*/.next/
+fixtures/apps/*/.nuxt/
+fixtures/apps/*/.output/
+fixtures/apps/*/build/
+fixtures/apps/*/.react-router/
+fixtures/apps/*/.angular/
+fixtures/apps/*/next-env.d.ts
+fixtures/apps/.packs/
+fixtures/apps/*/pnpm-lock.yaml
