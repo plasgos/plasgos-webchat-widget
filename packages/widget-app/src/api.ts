@@ -63,6 +63,12 @@ export class PublicApi {
     }
 
 
+    /** Naikkan sesi ke `verified` dengan identity token dari server website; refresh token ikut dirotasi. */
+    public identify(token: string, identityToken: string): Promise<Session> {
+        return this.request('POST', '/sessions/identify', { token, body: { identity_token: identityToken } });
+    }
+
+
     public shutdown(token: string): Promise<unknown> {
         return this.request('POST', '/sessions/shutdown', { token });
     }

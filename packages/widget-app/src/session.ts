@@ -110,6 +110,18 @@ export class SessionManager {
     }
 
 
+    /**
+     * Identitas terverifikasi: hak sesi naik → server merotasi refresh token, jadi dijalankan di bawah kunci yang sama
+     * dengan refresh (tab lain tak memakai refresh token lama bersamaan).
+     */
+    public async identify(identityToken: string): Promise<Session> {
+        if (!this.accessToken || this.expiresAt - this.deps.now() < REFRESH_MARGIN_MS) {
+            await this.refresh();
+        }
+        return this.exclusive(async () => this.adopt(await this.deps.api.identify(this.requireToken(), identityToken)));
+    }
+
+
     /** Logout website tenant: sesi dicabut di server, storage dibersihkan, tab lain ikut. */
     public async shutdown(): Promise<void> {
         const token = this.accessToken;

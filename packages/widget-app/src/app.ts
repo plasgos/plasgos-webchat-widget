@@ -44,6 +44,13 @@ type Payload<K extends keyof ServerEvents> = Parameters<ServerEvents[K]>[0];
  * Aplikasi widget di dalam iframe: konfigurasi → sesi → riwayat → realtime; kirim pesan optimistis dengan antrean
  * coba ulang; tanda sampai/dibaca; belum dibaca + suara; sinkron antar-tab; perintah dari loader.
  */
+/** Argumen perintah `identify`: `{ token }` (bentuk resmi) atau string token. */
+function identityTokenOf(value: unknown): string | null {
+    const token: unknown = typeof value === 'object' && value !== null ? Reflect.get(value, 'token') : value;
+    return typeof token === 'string' && token.length > 0 && token.length <= 8192 ? token : null;
+}
+
+
 export class WidgetApp {
     private readonly store = new Store(INITIAL_STATE);
 
@@ -68,6 +75,11 @@ export class WidgetApp {
     private hostOrigin: string;
 
     private hideLauncher = false;
+
+    /** Identity token dari website yang menunggu sesi siap (perintah `identify` sebelum/di tengah boot). */
+    private pendingIdentity: string | null = null;
+
+    private identifying = false;
 
     private viewport: Viewport = { width: 1280, height: 800 };
 
@@ -215,8 +227,8 @@ export class WidgetApp {
                 }
                 break;
             case 'identify':
-                // Identitas terverifikasi (identity token dari server tenant) — fase W4a.
-                this.env.host.event('error', { code: 'identify_unavailable', message: 'identify belum tersedia' });
+                this.pendingIdentity = identityTokenOf(first);
+                void this.applyIdentity();
                 break;
             case 'track':
             case 'consent':
@@ -259,6 +271,7 @@ export class WidgetApp {
             await this.syncHistory();
             this.realtime.connect();
             this.env.host.event('ready');
+            await this.applyIdentity();
         } catch (error) {
             this.onStartError(error, referrer);
         }
@@ -386,7 +399,12 @@ export class WidgetApp {
     private onSendError(clientMessageId: string, error: unknown): boolean {
         if (error instanceof ApiError && error.transient) {
             const delay = error.code === 'rate_limited' && error.retryAfterSeconds ? error.retryAfterSeconds * 1000 : this.nextRetryDelay();
-            this.store.update({ notice: error.code === 'rate_limited' ? { code: 'rate_limited', vars: { seconds: Math.ceil(delay / 1000) }, fatal: false } : null, connection: error.code === 'network' ? 'offline' : this.store.get().connection });
+            // Batas laju & plafon percakapan baru (429) ditampilkan; galat jaringan/server cukup indikator koneksi.
+            const shown = error.code === 'rate_limited' || error.code === 'conversation_limit_reached';
+            const seconds = Math.ceil(delay / 1000);
+            const notice = shown ? { code: error.code, vars: { seconds }, fatal: false } : null;
+            const connection = error.code === 'network' ? 'offline' : this.store.get().connection;
+            this.store.update({ notice, connection });
             this.scheduleRetry(delay);
             return false;
         }
@@ -398,7 +416,7 @@ export class WidgetApp {
             this.fatal(error.code);
             return false;
         }
-        if (error instanceof ApiError && error.code === 'conversation_limit_reached') {
+        if (error instanceof ApiError && (error.code === 'conversation_limit_reached' || error.code === 'identity_required')) {
             this.store.update({ notice: { code: error.code, fatal: false } });
         }
         return true;
@@ -642,6 +660,64 @@ export class WidgetApp {
             this.session.clear();
             this.store.update({ messages: [], unread: 0, conversationId: null, trustLevel: null });
         }
+    }
+
+
+    /**
+     * Pengunjung terverifikasi (W4a): identity token dari server website → sesi `verified`. Token milik pengguna LAIN
+     * dari yang sudah terverifikasi di sesi ini (`identity_mismatch`, mis. ganti akun tanpa logout) → sesi lama
+     * diakhiri, sesi baru dimulai lalu diverifikasi dengan token itu — riwayat pengguna sebelumnya tak terbawa.
+     */
+    private async applyIdentity(retried = false): Promise<void> {
+        const identityToken = this.pendingIdentity;
+        if (identityToken === null || this.identifying || !this.session.current) {
+            return;
+        }
+        this.identifying = true;
+        this.pendingIdentity = null;
+        try {
+            const session = await this.session.identify(identityToken);
+            const conversationId = session.conversation?.id ?? this.store.get().conversationId;
+            this.store.update({ trustLevel: session.trust_level, conversationId });
+            await this.syncHistory();
+            this.realtime.reconnect();
+        } catch (error) {
+            this.onIdentifyError(error, identityToken, retried);
+        } finally {
+            this.identifying = false;
+        }
+        // `identify` baru datang selama permintaan berjalan (mis. ganti akun cepat) → diterapkan berikutnya.
+        if (this.hasPendingIdentity()) {
+            void this.applyIdentity();
+        }
+    }
+
+
+    private hasPendingIdentity(): boolean {
+        return this.pendingIdentity !== null;
+    }
+
+
+    private onIdentifyError(error: unknown, identityToken: string, retried: boolean): void {
+        if (error instanceof ApiError && error.code === 'identity_mismatch' && !retried) {
+            void this.restartAs(identityToken);
+            return;
+        }
+        if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
+            this.fatal(error.code);
+            return;
+        }
+        const code = error instanceof ApiError ? error.code : 'unknown';
+        const reason = error instanceof ApiError ? error.details?.['reason'] ?? null : null;
+        this.env.host.event('error', { code, reason });
+    }
+
+
+    private async restartAs(identityToken: string): Promise<void> {
+        await this.shutdown();
+        await this.start();
+        this.pendingIdentity = identityToken;
+        await this.applyIdentity(true);
     }
 
 

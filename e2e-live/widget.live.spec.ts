@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { FrameLocator, Page } from '@playwright/test';
@@ -58,6 +60,7 @@ interface InboxMessage {
 }
 
 let widgetId = '';
+let identitySecret = '';
 
 test.beforeAll(async () => {
     for (const widget of await tenant<Widget[]>('GET', '/v2/webchat/widgets')) {
@@ -65,13 +68,14 @@ test.beforeAll(async () => {
             await tenant('DELETE', `/v2/webchat/widgets/${widget.widget_id}`);
         }
     }
-    const created = await tenant<{ widget: Widget }>('POST', '/v2/webchat/widgets', {
+    const created = await tenant<{ widget: Widget; identity_secret: string }>('POST', '/v2/webchat/widgets', {
         name: `${NAME_PREFIX} ${new Date().toISOString()}`,
         allowed_origins: [STORE_ORIGIN],
         appearance: { primary_color: '#1d4ed8', team_title: 'Tim Toko E2E', greeting: 'Halo dari Toko E2E' },
         security: { captcha: 'off' },
     });
     widgetId = created.widget.widget_id;
+    identitySecret = created.identity_secret;
 });
 
 test.afterAll(async () => {
@@ -205,6 +209,27 @@ test('dua tab pengunjung yang sama dibuka bersamaan → sesi tetap hidup; kirima
         await expect(frame.locator('.pw-msg[data-side="team"]').filter({ hasText: 'Balasan untuk semua tab' })).toBeVisible({ timeout: 15_000 });
         await expect(frame.locator('.pw-notice')).toBeHidden();
     }
+});
+
+/** Identity token HS256 seperti dibuat server website tenant (W4a). */
+function identityToken(sub: string): string {
+    const encode = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const iat = Math.floor(Date.now() / 1000);
+    const body = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub, email: `${sub}@contoh.co.id`, iat, exp: iat + 3600, jti: crypto.randomUUID() })}`;
+    return `${body}.${createHmac('sha256', identitySecret).update(body).digest('base64url')}`;
+}
+
+test('pelanggan login di website: Plasgos("identify") → sesi widget terverifikasi', async ({ page }) => {
+    await openStore(page);
+
+    await page.evaluate((token) => {
+        (window as unknown as { Plasgos: (...args: unknown[]) => void }).Plasgos('identify', { token });
+    }, identityToken(`pelanggan-${String(Date.now())}`));
+
+    await expect.poll(() => page.evaluate(() => {
+        const state = (window as unknown as { Plasgos: (name: string) => { trustLevel: string | null } }).Plasgos('getState');
+        return state.trustLevel;
+    }), { timeout: 15_000 }).toBe('verified');
 });
 
 test('aksesibilitas: jendela chat tanpa pelanggaran axe serius/kritis (WCAG 2.1 A/AA)', async ({ page }) => {

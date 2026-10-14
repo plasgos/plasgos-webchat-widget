@@ -43,6 +43,12 @@ function messageKey(message: ChatMessage): string {
 }
 
 /** Tampilan widget: DOM dibangun `createElement`; isi pesan tak pernah lewat `innerHTML`. */
+/** `identity.verification: "required"`: pengunjung belum terverifikasi tak bisa menulis (server juga menolak). */
+function needsIdentity(state: AppState): boolean {
+    return state.config?.identity?.verification === 'required' && state.trustLevel !== 'verified';
+}
+
+
 export class ChatView {
     private readonly root: HTMLDivElement;
 
@@ -190,7 +196,8 @@ export class ChatView {
         this.captcha.hidden = state.captchaSiteKey === null;
         this.input.placeholder = t('inputPlaceholder');
         this.sendButton.setAttribute('aria-label', t('send'));
-        const blocked = state.notice?.fatal === true || state.captchaSiteKey !== null || state.config === null;
+        const blocked = state.notice?.fatal === true || state.captchaSiteKey !== null || state.config === null
+            || needsIdentity(state);
         this.input.disabled = blocked;
         this.sendButton.disabled = blocked;
     }
@@ -203,6 +210,14 @@ export class ChatView {
             this.notice.dataset['tone'] = 'error';
             this.notice.setAttribute('role', 'alert');
             this.notice.textContent = errorText(state.locale, notice.code, notice.vars ?? {});
+            return;
+        }
+
+        if (needsIdentity(state)) {
+            this.notice.hidden = false;
+            this.notice.dataset['tone'] = 'info';
+            this.notice.setAttribute('role', 'status');
+            this.notice.textContent = translate(state.locale, 'identityRequired');
             return;
         }
 

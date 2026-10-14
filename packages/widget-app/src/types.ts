@@ -16,9 +16,15 @@ export interface Appearance {
     readonly z_index?: number;
 }
 
+/** `required` = pengunjung wajib terverifikasi (identity token dari website) sebelum bisa mengirim pesan. */
+export interface IdentitySettings {
+    readonly verification: 'off' | 'optional' | 'required';
+}
+
 export interface WidgetConfig {
     readonly widget_id: string;
     readonly appearance: Appearance;
+    readonly identity?: IdentitySettings;
     readonly captcha: { readonly mode: string; readonly provider: 'turnstile' | null; readonly site_key: string | null };
 }
 

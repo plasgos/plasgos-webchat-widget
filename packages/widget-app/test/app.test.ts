@@ -67,6 +67,9 @@ function json(status: number, data: unknown): Response {
 
 const sent: { url: string; body: unknown }[] = [];
 let appearance: Record<string, unknown> = {};
+let identity: Record<string, unknown> | null = null;
+/** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
+const identifyReplies: Response[] = [];
 
 function fakeServer(): void {
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => Promise.resolve(route(url, init))));
@@ -77,7 +80,10 @@ function route(url: string, init?: RequestInit): Response {
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
-        return json(200, { widget_id: WIDGET_ID, appearance: config, captcha: { mode: 'off', provider: null, site_key: null } });
+        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+    }
+    if (url.endsWith('/sessions/identify')) {
+        return identifyReplies.shift() ?? json(200, { access_token: 'akses-terverifikasi', expires_in: 900, refresh_token: 'rt-2', visitor_id: 'vis_1', trust_level: 'verified', conversation: null });
     }
     if (url.endsWith('/sessions')) {
         return json(200, { access_token: 'akses', expires_in: 900, refresh_token: 'rt', visitor_id: 'vis_1', trust_level: 'anonymous', conversation: null });
@@ -116,6 +122,8 @@ describe('aplikasi widget (iframe)', () => {
     beforeEach(() => {
         sent.length = 0;
         appearance = {};
+        identity = null;
+        identifyReplies.length = 0;
         socket.emitted.length = 0;
         socket.handlers.clear();
         socket.fake.connected = false;
@@ -148,6 +156,58 @@ describe('aplikasi widget (iframe)', () => {
         expect(last(port.frames)).toMatchObject({ state: 'hidden' });
         app.command({ name: 'open', args: [] });
         expect(last(port.frames)).toMatchObject({ state: 'open' });
+    });
+
+
+    it('identify sebelum sesi siap → diterapkan setelah boot; sesi verified & refresh token dirotasi', async () => {
+        const { WidgetApp } = await import('../src/app');
+        const port = host();
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const app = new WidgetApp({ window, document, container, widgetId: WIDGET_ID, host: port });
+        app.init({ options: { widgetId: WIDGET_ID }, page: { url: 'https://toko.com/', title: 'Toko', referrer: '' }, hostOrigin: 'https://toko.com' });
+        app.command({ name: 'identify', args: [{ token: 'jwt-pelanggan' }] });
+        await settle();
+        await settle();
+
+        const request = sent.find((entry) => entry.url.endsWith('/sessions/identify'));
+        expect(request?.body).toEqual({ identity_token: 'jwt-pelanggan' });
+        expect(last(port.states)).toMatchObject({ trustLevel: 'verified' });
+        expect(localStorage.getItem(`plasgos_webchat:${WIDGET_ID}:refresh`)).toBe('rt-2');
+    });
+
+
+    it('identity_mismatch (akun lain tanpa logout) → sesi baru lalu diverifikasi; token tak sah → event error + alasan', async () => {
+        identifyReplies.push(json(409, { success: false, error_code: 'identity_mismatch', message: 'x' }));
+        const { app, port } = await startApp();
+        app.command({ name: 'identify', args: [{ token: 'jwt-akun-lain' }] });
+        await settle();
+        await settle();
+        await settle();
+
+        expect(sent.filter((entry) => entry.url.endsWith('/sessions/identify'))).toHaveLength(2);
+        expect(sent.filter((entry) => entry.url.endsWith('/sessions'))).toHaveLength(2);
+        expect(last(port.states)).toMatchObject({ trustLevel: 'verified' });
+
+        identifyReplies.push(json(401, { success: false, error_code: 'identity_invalid', message: 'x', details: { reason: 'expired' } }));
+        app.command({ name: 'identify', args: [{ token: 'jwt-kedaluwarsa' }] });
+        await settle();
+        expect(port.events.find((event) => event.name === 'error')?.data).toEqual({ code: 'identity_invalid', reason: 'expired' });
+    });
+
+
+    it('widget wajib terverifikasi → kotak tulis terkunci + ajakan masuk; setelah identify terbuka', async () => {
+        identity = { verification: 'required', otp_email: true };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+
+        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+        expect(container.querySelector('.pw-notice')?.textContent).toBe('Masuk ke akun Anda di website ini untuk mulai chat.');
+
+        app.command({ name: 'identify', args: [{ token: 'jwt-pelanggan' }] });
+        await settle();
+        await settle();
+        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
     });
 
 
