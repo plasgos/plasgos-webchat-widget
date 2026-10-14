@@ -42,6 +42,12 @@ export const APPS: readonly FixtureApp[] = [
         start: 'pnpm --dir fixtures/apps/react-router start',
         entries: [{ label: 'mode framework (penerus Remix)', path: '/', link: '#ke-produk', target: '/produk' }],
     },
+    {
+        name: 'nuxt3',
+        port: 4514,
+        start: 'pnpm --dir fixtures/apps/nuxt3 start',
+        entries: [{ label: 'plugin .client + router', path: '/', link: '#ke-produk', target: '/produk' }],
+    },
 ];
 
 /** `APPS=next15,nuxt3` membatasi aplikasi yang diuji (yang belum dibangun dilewati). */

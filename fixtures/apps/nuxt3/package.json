@@ -1,0 +1,23 @@
+{
+  "name": "fixture-nuxt3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "start": "PORT=4514 node .output/server/index.mjs"
+  },
+  "dependencies": {
+    "@plasgos/webchat": "file:../.packs/webchat.tgz",
+    "@plasgos/webchat-vue": "file:../.packs/vue.tgz",
+    "nuxt": "3.21.11",
+    "vue": "3.5.44"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@plasgos/webchat": "file:../.packs/webchat.tgz"
+    }
+  }
+}
