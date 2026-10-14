@@ -35,6 +35,8 @@ export default tseslint.config(
         rules: {
             ...style,
             '@typescript-eslint/no-explicit-any': 'error',
+            // Komponen Angular tanpa logika = kelas kosong ber-decorator (pola baku Angular).
+            '@typescript-eslint/no-extraneous-class': ['error', { allowWithDecorator: true }],
             '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }],
             '@typescript-eslint/consistent-type-imports': 'error',
             '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],

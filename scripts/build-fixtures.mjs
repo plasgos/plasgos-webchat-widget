@@ -19,7 +19,7 @@ function reactAlias(name) {
 }
 
 for (const name of readdirSync(join(ROOT, 'fixtures'))) {
-    const entry = ['main.jsx', 'main.js'].map((file) => join(ROOT, 'fixtures', name, file)).find((file) => existsSync(file));
+    const entry = ['main.ts', 'main.jsx', 'main.js'].map((file) => join(ROOT, 'fixtures', name, file)).find((file) => existsSync(file));
     if (!entry) continue;
     await build({
         entryPoints: [entry],
@@ -28,6 +28,8 @@ for (const name of readdirSync(join(ROOT, 'fixtures'))) {
         format: 'esm',
         target: 'es2020',
         jsx: 'automatic',
+        // Fixture Angular (JIT): decorator gaya TypeScript seperti proyek Angular CLI.
+        tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false } },
         // Flag build Vue (esm-bundler) & mode produksi pustaka.
         define: {
             __VUE_OPTIONS_API__: 'true',
@@ -40,6 +42,7 @@ for (const name of readdirSync(join(ROOT, 'fixtures'))) {
             '@plasgos/webchat': join(DIST, 'index.js'),
             '@plasgos/webchat-react': join(ROOT, 'packages/react/dist/index.js'),
             '@plasgos/webchat-vue': join(ROOT, 'packages/vue/dist/index.js'),
+            '@plasgos/webchat-angular': join(ROOT, 'packages/angular/dist/index.js'),
             ...reactAlias(name),
         },
         logLevel: 'warning',

@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "noUnusedLocals": false,
+    "paths": { "@plasgos/webchat-angular": ["../packages/angular/src/index.ts"], "@plasgos/webchat": ["../packages/webchat/src/index.ts"] }
+  },
+  "include": ["*/main.ts"]
+}

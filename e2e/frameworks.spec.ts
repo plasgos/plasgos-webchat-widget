@@ -99,3 +99,26 @@ test('Vue 3 + Vue Router: satu widget; navigasi dilaporkan SEKALI dari router; c
     await expect.poll(async () => (await commandsOf(page, 'open')).length).toBe(1);
     expect(errors).toEqual([]);
 });
+
+test('Angular standalone: satu widget; navigasi Router dilaporkan SEKALI; service membuka chat', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('console', (message) => {
+        if (message.type() === 'error') errors.push(message.text());
+    });
+    await page.goto('/fixtures/angular-standalone/');
+    await expect(page.locator('h2')).toHaveText('Beranda');
+    await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
+    await expect.poll(() => receivedCount(page)).toBeGreaterThan(0);
+
+    await page.click('#ke-produk');
+    await expect(page.locator('h2')).toHaveText('Produk');
+
+    await expect.poll(async () => (await commandsOf(page, 'page')).length).toBe(1);
+    await page.waitForTimeout(600);
+    expect(await commandsOf(page, 'page')).toHaveLength(1);
+
+    await page.click('#bantuan');
+    await expect.poll(async () => (await commandsOf(page, 'open')).length).toBe(1);
+    expect(errors).toEqual([]);
+});
