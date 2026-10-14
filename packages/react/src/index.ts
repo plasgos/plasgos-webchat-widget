@@ -17,9 +17,9 @@ export type { WebchatClient, WebchatOptions, WebchatState } from '@plasgos/webch
 export interface PlasgosWebchatProps extends WebchatOptions {
     /**
      * Path halaman saat ini (Next `usePathname()`, React Router `useLocation().pathname`) — dilaporkan sebagai
-     * navigasi bila berubah. Opsional: loader juga mendeteksi navigasi SPA sendiri.
+     * navigasi bila berubah. Opsional: loader juga mendeteksi navigasi SPA sendiri. `null` (Next `usePathname()`
+     * bertipe `string | null`) diperlakukan seperti tidak diberikan.
      */
-    /** `null` diterima (Next `usePathname()` bertipe `string | null`) dan diperlakukan seperti tidak diberikan. */
     readonly pathname?: string | null;
 }
 

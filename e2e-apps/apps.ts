@@ -27,6 +27,21 @@ export const APPS: readonly FixtureApp[] = [
             { label: 'Pages Router', path: '/lama', link: '#ke-lama-produk', target: '/lama-produk' },
         ],
     },
+    {
+        name: 'next14',
+        port: 4512,
+        start: 'pnpm --dir fixtures/apps/next14 start',
+        entries: [
+            { label: 'App Router (React 18)', path: '/', link: '#ke-produk', target: '/produk' },
+            { label: 'Pages Router (React 18)', path: '/lama', link: '#ke-lama-produk', target: '/lama-produk' },
+        ],
+    },
+    {
+        name: 'react-router',
+        port: 4513,
+        start: 'pnpm --dir fixtures/apps/react-router start',
+        entries: [{ label: 'mode framework (penerus Remix)', path: '/', link: '#ke-produk', target: '/produk' }],
+    },
 ];
 
 /** `APPS=next15,nuxt3` membatasi aplikasi yang diuji (yang belum dibangun dilewati). */
