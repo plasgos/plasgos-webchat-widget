@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Toko E2E — uji widget terhadap api-crm</title>
+    <!-- Website tenant untuk uji LIVE (e2e-live/): loader asli → iframe `/w/:widget_id` api-crm → aplikasi widget asli.
+         ?widget=<id> &origin=<origin dokumen iframe api-crm>. -->
+    <script>
+        (function (w, d) {
+            var params = new URLSearchParams(w.location.search);
+            var id = params.get('widget');
+            var q = function () { q.q.push(arguments); }; q.q = [];
+            w.Plasgos = q;
+            var s = d.createElement('script');
+            s.async = true;
+            s.src = '/packages/loader/dist/loader.js';
+            s.setAttribute('data-widget-id', id);
+            s.setAttribute('data-widget-origin', params.get('origin') || 'http://127.0.0.1:3001');
+            d.head.appendChild(s);
+            w.Plasgos('boot', { widgetId: id, load: 'eager' });
+        })(window, document);
+    </script>
+</head>
+<body>
+    <main>
+        <h1>Toko E2E</h1>
+        <p>Kaos Polos Premium — Rp 79.000</p>
+    </main>
+</body>
+</html>

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@plasgos/webchat-protocol": "workspace:*"
+    "@plasgos/webchat-protocol": "workspace:*",
+    "socket.io-client": "4.8.1"
   }
 }

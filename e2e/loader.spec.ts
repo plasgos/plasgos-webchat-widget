@@ -29,9 +29,14 @@ async function watchProblems(page: Page): Promise<string[]> {
     return problems;
 }
 
+/** Iframe widget yang SEDANG terpasang — setelah root dipasang ulang, iframe lama sempat masih terdaftar (terlepas). */
+function liveWidgetFrame(page: Page): Frame | undefined {
+    return page.frames().filter((frame) => frame.url().includes('/w/wgt_') && !frame.isDetached()).pop();
+}
+
 async function widgetFrame(page: Page): Promise<Frame> {
-    await expect.poll(() => page.frames().some((frame) => frame.url().includes('/w/wgt_'))).toBe(true);
-    const frame = page.frames().find((candidate) => candidate.url().includes('/w/wgt_'));
+    await expect.poll(() => liveWidgetFrame(page) !== undefined).toBe(true);
+    const frame = liveWidgetFrame(page);
     if (!frame) throw new Error('iframe widget tak ditemukan');
     return frame;
 }

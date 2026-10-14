@@ -59,6 +59,38 @@ Atribut `data-widget-origin` pada tag loader menimpanya (staging/uji).
 (mis. CSP ketat). `fixtures/_widget-stub/` menjawab `/w/:widget_id` dari origin lain (`127.0.0.1`) dengan sisi iframe
 protokol v1 sampai aplikasi widget asli (W3c) dipakai di e2e.
 
+## Aplikasi widget (`packages/widget-app`)
+
+TypeScript murni tanpa framework (anggaran 60 KB gzip; saat ini ±26 KB termasuk klien socket.io), target build =
+peramban yang didukung (Safari/iOS 15, Chrome/Edge/Firefox 100) supaya sintaks yang tak tersedia ditolak saat build.
+
+| Modul | Tanggung jawab |
+|---|---|
+| `bridge` | protokol v1 ke loader; pesan masuk dicek origin + jendela induk |
+| `api` | REST `/webchat/v1` (tanpa cookie), galat berkode stabil |
+| `session` | token akses + refresh token berotasi; refresh/boot antar-tab di bawah satu kunci (Web Locks), token dibagikan lewat BroadcastChannel |
+| `realtime` | socket.io `/webchat`, `auth` berupa fungsi (token terbaru tiap sambung) |
+| `store`, `app` | keadaan, pesan optimistis + antrean coba ulang, sampai/dibaca, belum dibaca, mengetik, perintah loader |
+| `ui/*`, `markdown`, `i18n`, `colors`, `layout` | tampilan tanpa `innerHTML` untuk isi pesan, markdown subset aman, id/en, kontras WCAG, tata letak bingkai |
+| `captcha`, `sound` | Turnstile dimuat hanya bila diminta server; nada notifikasi Web Audio |
+
+## Uji live terhadap api-crm
+
+`e2e-live/` menjalankan loader + aplikasi widget asli terhadap api-crm dev (REST, socket, inbox sungguhan) — tidak di
+CI. Server fixture berperan sebagai CDN:
+
+```bash
+# 1. api-crm dev memuat aplikasi widget dari server fixture (env proses pm2, tanpa ubah berkas):
+docker exec dev-api-crm-app-dev sh -c 'cd /app && WEBCHAT_CDN_ORIGIN=http://localhost:4400 WEBCHAT_PUBLIC_ORIGIN=http://127.0.0.1:3001 pm2 restart api-crm --update-env'
+# 2. jalankan (token tenant; di api-crm lokal berbentuk terenkripsi iv:cipher):
+pnpm build
+API_CRM_TOKEN=<token> PW_CHROMIUM_CHANNEL=chrome pnpm e2e:live --project=chromium
+API_CRM_TOKEN=<token> pnpm e2e:live --project=firefox
+```
+
+Skenario: tanya-jawab realtime dengan status sampai/dibaca dua arah, muat ulang memulihkan sesi & riwayat, antrean
+saat offline, dua tab pengunjung yang sama, audit aksesibilitas axe (WCAG 2.1 A/AA tanpa pelanggaran serius/kritis).
+
 ## Anggaran yang dijaga CI
 
 | Apa | Batas | Berkas |

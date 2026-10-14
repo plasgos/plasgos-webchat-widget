@@ -1,21 +1,59 @@
 /**
- * APLIKASI WIDGET — berjalan di dalam iframe dari origin widget Plasgos (`/w/:widget_id`, dilayani api-crm).
- * Semua jaringan (REST `/webchat/v1`, socket `/webchat`) dan storage ada di sini, tidak pernah di halaman tenant.
- *
- * W3a: kerangka build & anggaran ukuran. Isi aplikasi (launcher, jendela chat, kirim/terima, reconnect,
- * multi-tab, i18n, aksesibilitas) diisi di W3c.
+ * APLIKASI WIDGET — titik masuk di dokumen iframe `/w/:widget_id` (api-crm), dimuat dari CDN
+ * `widget-app/v1/app.js` dengan `data-widget-id`. Semua jaringan (REST `/webchat/v1`, socket `/webchat`) dan storage
+ * ada di sini, tak pernah di halaman tenant; ke loader hanya lewat protokol postMessage v1.
  */
-import { PROTOCOL_VERSION } from '@plasgos/webchat-protocol';
+import { WIDGET_ID_PATTERN } from '@plasgos/webchat-protocol';
+
+import { WidgetApp } from './app';
+import type { HostPort } from './app';
+import { HostBridge, parentOriginOf } from './bridge';
 
 const ROOT_ID = 'plasgos-webchat-app';
 
-function widgetIdOfScript(): string | null {
-    const script = document.currentScript;
-    return script instanceof HTMLScriptElement ? script.dataset['widgetId'] ?? null : null;
+function widgetIdOf(doc: Document): string | null {
+    const script = doc.currentScript;
+    const fromScript = script instanceof HTMLScriptElement ? script.dataset['widgetId'] : undefined;
+    const fromPath = doc.location.pathname.split('/').pop();
+    const candidate = fromScript ?? fromPath ?? '';
+    return WIDGET_ID_PATTERN.test(candidate) ? candidate : null;
 }
 
-const root = document.getElementById(ROOT_ID);
-if (root) {
-    root.dataset['protocol'] = String(PROTOCOL_VERSION);
-    root.dataset['widgetId'] = widgetIdOfScript() ?? '';
+function boot(win: Window, doc: Document, widgetId: string): void {
+    const container = doc.getElementById(ROOT_ID) ?? doc.body;
+    const parentOrigin = parentOriginOf(win, doc);
+    const embedded = win.parent !== win && parentOrigin !== null;
+
+    if (!embedded) {
+        // Dibuka langsung (halaman penuh / WebView): tanpa loader, jendela chat langsung terbuka.
+        const host: HostPort = { frame: () => undefined, state: () => undefined, event: () => undefined };
+        const app = new WidgetApp({ window: win, document: doc, container, widgetId, host });
+        app.init({
+            options: { widgetId },
+            page: { url: win.location.href, title: doc.title, referrer: doc.referrer },
+            hostOrigin: win.location.origin,
+        });
+        app.openStandalone();
+        return;
+    }
+
+    let app: WidgetApp | null = null;
+    const bridge = new HostBridge(win, parentOrigin, {
+        onInit: (payload) => app?.init(payload),
+        onCommand: (payload) => {
+            app?.command(payload);
+        },
+        onViewport: (payload) => {
+            app?.setViewport(payload);
+        },
+    });
+    app = new WidgetApp({ window: win, document: doc, container, widgetId, host: bridge });
+    bridge.start();
+}
+
+const widgetId = widgetIdOf(document);
+if (widgetId) {
+    boot(window, document, widgetId);
+} else {
+    console.warn('[Plasgos Webchat] id widget tidak ditemukan di dokumen iframe');
 }

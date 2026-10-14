@@ -47,7 +47,7 @@ export default tseslint.config(
         rules: { '@stylistic/max-len': 'off' },
     },
     {
-        files: ['**/test/**/*.ts', 'e2e/**/*.ts'],
+        files: ['**/test/**/*.ts', 'e2e/**/*.ts', 'e2e-live/**/*.ts'],
         rules: { '@typescript-eslint/explicit-function-return-type': 'off' },
     },
 );

@@ -29,6 +29,10 @@ createServer(async (req, res) => {
         res.writeHead(204).end();
         return;
     }
+    // Peran CDN untuk uji live terhadap api-crm dev: `WEBCHAT_CDN_ORIGIN` api-crm diarahkan ke server ini, lalu
+    // dokumen iframe memuat `${CDN}/widget-app/v1/app.js` = hasil build paket widget-app.
+    const cdnAsset = /^widget-app\/v1\/(app\.js(?:\.map)?)$/.exec(path);
+    if (cdnAsset) path = `packages/widget-app/dist/${cdnAsset[1]}`;
     // Dokumen iframe widget (`/w/:widget_id`) — dilayani stub uji loader sampai aplikasi widget asli (W3c).
     if (/^w\/wgt_[0-9a-f]{24}$/.test(path)) path = 'fixtures/_widget-stub/index.html';
     if (path.endsWith('/') || path === '') path += 'index.html';

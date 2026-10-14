@@ -10,15 +10,17 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
-    "typecheck": "pnpm -r run typecheck && tsc -p e2e/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm -r run typecheck && tsc -p e2e/tsconfig.json --noEmit && tsc -p e2e-live/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "size": "node scripts/size-budget.mjs",
     "e2e": "playwright test",
     "perf": "node scripts/lighthouse-compare.mjs",
-    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm size && pnpm e2e"
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm size && pnpm e2e",
+    "e2e:live": "playwright test -c playwright.live.config.ts"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.0",
     "@stylistic/eslint-plugin": "5.10.0",
