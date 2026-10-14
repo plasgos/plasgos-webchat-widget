@@ -44,6 +44,18 @@ function offsetOf(value: unknown): LoaderOptions['offset'] {
 }
 
 /**
+ * `identityToken` di opsi `boot` (halaman server-rendered untuk pelanggan yang login): boot + identify dalam satu
+ * panggilan. Bukan opsi widget — diteruskan sebagai perintah `identify`.
+ */
+export function identityTokenOf(input: unknown): string | null {
+    if (!isRecord(input)) {
+        return null;
+    }
+    const token = input['identityToken'];
+    return typeof token === 'string' && token.length > 0 && token.length <= 8192 ? token : null;
+}
+
+/**
  * Opsi `Plasgos('boot', {...})` dari tenant → opsi widget + opsi loader. Tak pernah melempar: masukan yang salah
  * jadi `{ ok: false, reason }` (dicatat sebagai peringatan, widget tidak menyala) atau diabaikan per kolom.
  */

@@ -105,6 +105,22 @@ describe('controller loader', () => {
     });
 
 
+    it('boot dengan identityToken (halaman server-rendered) = boot + identify; token TIDAK ikut opsi host.init', () => {
+        const webchat = controller();
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager', identityToken: 'jwt-pelanggan' }]);
+        vi.advanceTimersByTime(10);
+        const posted = vi.spyOn(iframes()[0]?.contentWindow as Window, 'postMessage').mockImplementation(() => undefined);
+
+        fromWidget(createMessage('widget.ready', {}));
+
+        type Posted = { type: string; payload: Record<string, unknown> };
+        const messages = posted.mock.calls.map(([message]) => message as Posted);
+        expect(JSON.stringify(messages.find((message) => message.type === 'host.init'))).not.toContain('jwt-pelanggan');
+        const command = messages.find((message) => message.type === 'host.command');
+        expect(command?.payload).toEqual({ name: 'identify', args: [{ token: 'jwt-pelanggan' }] });
+    });
+
+
     it('tanpa widget.ready dalam 10 detik → widget dilepas, peringatan & event error', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         const webchat = controller();

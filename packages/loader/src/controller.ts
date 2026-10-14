@@ -12,7 +12,7 @@ import type {
 import { FrameHost } from './frame';
 import { warn } from './log';
 import { watchNavigation } from './navigation';
-import { parseBootOptions } from './options';
+import { identityTokenOf, parseBootOptions } from './options';
 import type { ParsedBoot } from './options';
 
 /** Tanpa `widget.ready` selama ini (mis. ditolak `frame-ancestors`: domain belum didaftarkan) → widget dicabut. */
@@ -143,15 +143,18 @@ export class WebchatController {
             return;
         }
 
-        if (this.boot?.widget.widgetId === parsed.value.widget.widgetId) {
-            return;
+        if (this.boot?.widget.widgetId !== parsed.value.widget.widgetId) {
+            if (this.boot) {
+                this.teardown();
+            }
+            this.boot = parsed.value;
+            this.scheduleMount();
         }
 
-        if (this.boot) {
-            this.teardown();
+        const identityToken = identityTokenOf(input);
+        if (identityToken) {
+            this.command('identify', [{ token: identityToken }]);
         }
-        this.boot = parsed.value;
-        this.scheduleMount();
     }
 
 
