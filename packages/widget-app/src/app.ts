@@ -52,6 +52,22 @@ function identityTokenOf(value: unknown): string | null {
 }
 
 
+/** Galat OTP → kode tampilan panel (`otp_wrong` membawa sisa percobaan, `rate_limited` membawa detik tunggu). */
+function otpErrorOf(error: unknown): { code: string; vars?: Record<string, string | number> } {
+    if (!(error instanceof ApiError)) {
+        return { code: 'unknown' };
+    }
+    if (error.code === 'otp_invalid') {
+        const left = error.details?.['attempts_left'];
+        return typeof left === 'number' ? { code: 'otp_wrong', vars: { attempts: left } } : { code: 'otp_expired' };
+    }
+    if (error.code === 'rate_limited') {
+        return { code: 'rate_limited', vars: { seconds: error.retryAfterSeconds ?? 60 } };
+    }
+    return { code: error.code };
+}
+
+
 export class WidgetApp {
     private readonly store = new Store(INITIAL_STATE);
 
@@ -173,6 +189,18 @@ export class WidgetApp {
             },
             skipPrechat: () => {
                 this.skipPrechat();
+            },
+            openOtp: () => {
+                this.store.update({ otp: { step: 'email', email: '', busy: false, error: null } });
+            },
+            requestOtp: (email) => {
+                void this.requestOtp(email);
+            },
+            verifyOtp: (code) => {
+                void this.verifyOtp(code);
+            },
+            otpChangeEmail: () => {
+                this.updateOtp({ step: 'email', error: null });
             },
         });
         this.view.mount(env.container);
@@ -708,6 +736,43 @@ export class WidgetApp {
             if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
                 this.fatal(error.code);
             }
+        }
+    }
+
+
+    private updateOtp(patch: Partial<NonNullable<AppState['otp']>>): void {
+        this.store.update((state) => (state.otp ? { otp: { ...state.otp, ...patch } } : {}));
+    }
+
+
+    /** Kode verifikasi ke email (W4c). */
+    private async requestOtp(email: string): Promise<void> {
+        this.updateOtp({ busy: true, error: null, email });
+        try {
+            await this.session.withToken((token) => this.api.requestOtp(token, email));
+            this.updateOtp({ busy: false, step: 'code' });
+        } catch (error) {
+            this.updateOtp({ busy: false, error: otpErrorOf(error) });
+        }
+    }
+
+
+    /** Kode benar → pengunjung terverifikasi; riwayat & socket dimuat ulang dengan hak baru. */
+    private async verifyOtp(code: string): Promise<void> {
+        const email = this.store.get().otp?.email ?? '';
+        this.updateOtp({ busy: true, error: null });
+        try {
+            const session = await this.session.verifyOtp(email, code);
+            this.store.update({ otp: null, trustLevel: session.trust_level, prechatPending: false, notice: null });
+            await this.syncHistory();
+            this.realtime.reconnect();
+            this.view.focusInput();
+        } catch (error) {
+            if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
+                this.fatal(error.code);
+                return;
+            }
+            this.updateOtp({ busy: false, error: otpErrorOf(error) });
         }
     }
 

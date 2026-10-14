@@ -84,6 +84,15 @@ function route(url: string, init?: RequestInit): Response {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
         return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
     }
+    if (url.endsWith('/otp/request')) {
+        return json(200, { sent: true, expires_in: 600 });
+    }
+    if (url.endsWith('/otp/verify')) {
+        const code = (body as { code: string }).code;
+        return code === '123456'
+            ? json(200, { access_token: 'akses-otp', expires_in: 900, refresh_token: 'rt-otp', visitor_id: 'vis_1', trust_level: 'verified', conversation: null })
+            : json(401, { success: false, error_code: 'otp_invalid', message: 'Kode salah.', details: { reason: 'mismatch', attempts_left: 4 } });
+    }
     if (url.endsWith('/prechat')) {
         return json(200, { trust_level: 'contact_provided', prechat_completed: true });
     }
@@ -278,6 +287,40 @@ describe('aplikasi widget (iframe)', () => {
         const done = await startApp();
         done.app.command({ name: 'open', args: [] });
         expect((done.container.querySelector('form.pw-prechat') as HTMLFormElement).hidden).toBe(true);
+    });
+
+
+    it('wajib terverifikasi tanpa login website → verifikasi email (OTP): kirim kode, kode salah, kode benar → bisa menulis', async () => {
+        identity = { verification: 'required', otp_email: true };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const entry = container.querySelector('.pw-otp-entry') as HTMLButtonElement;
+        expect(entry.hidden).toBe(false);
+        expect(entry.textContent).toBe('Verifikasi lewat email');
+
+        entry.click();
+        const panel = container.querySelector('form.pw-otp') as HTMLFormElement;
+        const input = container.querySelector('#pw-otp-input') as HTMLInputElement;
+        expect(panel.hidden).toBe(false);
+        input.value = 'Budi@Contoh.co.id';
+        panel.dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+        expect(sent.find((entry_) => entry_.url.endsWith('/otp/request'))?.body).toEqual({ email: 'budi@contoh.co.id' });
+        expect(container.querySelector('.pw-otp-hint')?.textContent).toBe('Kode dikirim ke budi@contoh.co.id. Periksa juga folder spam.');
+        expect(input.autocomplete).toBe('one-time-code');
+
+        input.value = '000000';
+        panel.dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+        expect(container.querySelector('#pw-otp-error')?.textContent).toBe('Kode salah. Sisa 4 percobaan.');
+
+        input.value = '123456';
+        panel.dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+        await settle();
+        expect(panel.hidden).toBe(true);
+        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
+        expect(localStorage.getItem(`plasgos_webchat:${WIDGET_ID}:refresh`)).toBe('rt-otp');
     });
 
 

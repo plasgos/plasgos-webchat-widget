@@ -40,6 +40,8 @@ export interface PrivacySettings {
 /** `required` = pengunjung wajib terverifikasi (identity token dari website) sebelum bisa mengirim pesan. */
 export interface IdentitySettings {
     readonly verification: 'off' | 'optional' | 'required';
+    /** Pengunjung boleh membuktikan email lewat kode sekali pakai (W4c). */
+    readonly otp_email?: boolean;
 }
 
 export interface WidgetConfig {
@@ -60,6 +62,11 @@ export interface Session {
     readonly conversation: { readonly id: string } | null;
     /** Formulir pre-chat sudah dikirim pengunjung ini (W4b). Server lama tak mengirimnya → dianggap belum. */
     readonly prechat_completed?: boolean;
+}
+
+export interface OtpRequestResult {
+    readonly sent: boolean;
+    readonly expires_in: number;
 }
 
 export interface PrechatResult {

@@ -115,10 +115,21 @@ export class SessionManager {
      * dengan refresh (tab lain tak memakai refresh token lama bersamaan).
      */
     public async identify(identityToken: string): Promise<Session> {
+        return this.elevate((token) => this.deps.api.identify(token, identityToken));
+    }
+
+
+    /** OTP email benar → sesi `verified` (W4c); rotasi refresh token sama seperti identify. */
+    public async verifyOtp(email: string, code: string): Promise<Session> {
+        return this.elevate((token) => this.deps.api.verifyOtp(token, email, code));
+    }
+
+
+    private async elevate(call: (token: string) => Promise<Session>): Promise<Session> {
         if (!this.accessToken || this.expiresAt - this.deps.now() < REFRESH_MARGIN_MS) {
             await this.refresh();
         }
-        return this.exclusive(async () => this.adopt(await this.deps.api.identify(this.requireToken(), identityToken)));
+        return this.exclusive(async () => this.adopt(await call(this.requireToken())));
     }
 
 

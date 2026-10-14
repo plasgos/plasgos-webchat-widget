@@ -4,6 +4,7 @@ import { errorText, translate } from '../i18n';
 import { renderMarkdown } from '../markdown';
 import type { AppState } from '../store';
 import type { ChatMessage } from '../types';
+import { OtpPanel } from './otp';
 import { PrechatForm } from './prechat';
 import type { PrechatValues } from './prechat';
 import { STYLES } from './styles';
@@ -18,6 +19,10 @@ export interface ViewActions {
     readonly interact: () => void;
     readonly submitPrechat: (values: PrechatValues) => void;
     readonly skipPrechat: () => void;
+    readonly openOtp: () => void;
+    readonly requestOtp: (email: string) => void;
+    readonly verifyOtp: (code: string) => void;
+    readonly otpChangeEmail: () => void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -53,6 +58,14 @@ function needsIdentity(state: AppState): boolean {
 }
 
 
+/** Galat panel OTP → teks: salah kode (sisa percobaan), kedaluwarsa, terkunci; lainnya teks galat umum. */
+function otpErrorText(state: AppState, error: NonNullable<AppState['otp']>['error'] & object): string {
+    const keys: Partial<Record<string, MessageKey>> = { otp_wrong: 'otpWrongCode', otp_expired: 'otpExpired', otp_locked: 'otpLocked' };
+    const key = keys[error.code];
+    return key ? translate(state.locale, key, error.vars ?? {}) : errorText(state.locale, error.code, error.vars ?? {});
+}
+
+
 export class ChatView {
     private readonly root: HTMLDivElement;
 
@@ -81,6 +94,10 @@ export class ChatView {
     private readonly captcha: HTMLDivElement;
 
     private readonly prechat: PrechatForm;
+
+    private readonly otp: OtpPanel;
+
+    private readonly otpEntry: HTMLButtonElement;
 
     private readonly input: HTMLTextAreaElement;
 
@@ -125,6 +142,16 @@ export class ChatView {
         this.typingLine.setAttribute('aria-live', 'polite');
         this.captcha = this.element('div', 'pw-captcha');
         this.prechat = new PrechatForm(doc, { submit: actions.submitPrechat, skip: actions.skipPrechat });
+        this.otp = new OtpPanel(doc, {
+            request: actions.requestOtp,
+            verify: actions.verifyOtp,
+            changeEmail: actions.otpChangeEmail,
+        });
+        this.otpEntry = this.element('button', 'pw-otp-entry');
+        this.otpEntry.type = 'button';
+        this.otpEntry.addEventListener('click', () => {
+            actions.openOtp();
+        });
 
         const composer = this.element('form', 'pw-composer');
         const label = this.element('label', 'pw-sr');
@@ -138,7 +165,8 @@ export class ChatView {
         this.sendButton.appendChild(this.icon(ICONS.send, 20));
         composer.append(label, this.input, this.sendButton);
         this.window.append(
-            header, this.notice, this.list, this.typingLine, this.captcha, this.prechat.element, composer,
+            header, this.notice, this.otpEntry, this.list, this.typingLine, this.captcha, this.prechat.element,
+            this.otp.element, composer,
         );
         this.root.append(this.launcher, this.window);
 
@@ -212,6 +240,17 @@ export class ChatView {
             consentText: state.config.privacy?.consent_text ?? null,
             busy: state.prechatBusy,
             failed: state.prechatError !== null,
+            t,
+        } : null);
+        // Widget wajib terverifikasi tanpa login website: pengunjung bisa membuktikan email (OTP, W4c).
+        const otpAllowed = needsIdentity(state) && state.config?.identity?.otp_email !== false;
+        this.otpEntry.hidden = !otpAllowed || state.otp !== null;
+        this.otpEntry.textContent = t('otpEntry');
+        this.otp.render(state.otp ? {
+            step: state.otp.step,
+            email: state.otp.email,
+            busy: state.otp.busy,
+            error: state.otp.error ? otpErrorText(state, state.otp.error) : null,
             t,
         } : null);
         const blocked = state.notice?.fatal === true || state.captchaSiteKey !== null || state.config === null

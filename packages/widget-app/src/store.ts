@@ -39,6 +39,15 @@ export interface AppState {
     readonly prechatBusy: boolean;
     /** Kode galat kiriman formulir terakhir (ditampilkan di formulir), atau null. */
     readonly prechatError: string | null;
+    /** Panel verifikasi email (W4c): null = tertutup. */
+    readonly otp: OtpState | null;
+}
+
+export interface OtpState {
+    readonly step: 'email' | 'code';
+    readonly email: string;
+    readonly busy: boolean;
+    readonly error: { readonly code: string; readonly vars?: Readonly<Record<string, string | number>> } | null;
 }
 
 export const INITIAL_STATE: AppState = {
@@ -58,6 +67,7 @@ export const INITIAL_STATE: AppState = {
     prechatPending: false,
     prechatBusy: false,
     prechatError: null,
+    otp: null,
 };
 
 function rank(status: string | null): number {

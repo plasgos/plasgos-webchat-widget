@@ -1,4 +1,4 @@
-import type { ConversationPage, PageInfo, PrechatResult, SendResult, Session, WidgetConfig } from './types';
+import type { ConversationPage, OtpRequestResult, PageInfo, PrechatResult, SendResult, Session, WidgetConfig } from './types';
 
 /**
  * Galat API publik dengan kode stabil (`error_code` server) — teks untuk pengunjung dipilih dari kode, bukan dari
@@ -77,6 +77,18 @@ export class PublicApi {
     /** Formulir pre-chat (W4b): isian + persetujuan → kontak diisi (tanpa penggabungan), sesi `contact_provided`. */
     public prechat(token: string, body: PrechatBody): Promise<PrechatResult> {
         return this.request('POST', '/prechat', { token, body });
+    }
+
+
+    /** Kode verifikasi ke email (W4c). Jawaban sama untuk alamat apa pun. */
+    public requestOtp(token: string, email: string): Promise<OtpRequestResult> {
+        return this.request('POST', '/otp/request', { token, body: { email } });
+    }
+
+
+    /** Email + kode → sesi `verified`; refresh token ikut dirotasi. */
+    public verifyOtp(token: string, email: string, code: string): Promise<Session> {
+        return this.request('POST', '/otp/verify', { token, body: { email, code } });
     }
 
 
