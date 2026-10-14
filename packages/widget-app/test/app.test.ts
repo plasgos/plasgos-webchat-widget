@@ -71,6 +71,9 @@ let identity: Record<string, unknown> | null = null;
 let prechatConfig: Record<string, unknown> | null = null;
 let prechatCompleted = false;
 let teamOnline: boolean | null = null;
+/** Jam kerja & ketersediaan di konfigurasi (W5b); null = server lama (tanpa kolom). */
+let hours: { business_hours: unknown; availability: unknown; offline: unknown } | null = null;
+let emailOnFile = false;
 /** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
 const identifyReplies: Response[] = [];
 
@@ -83,7 +86,7 @@ function route(url: string, init?: RequestInit): Response {
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
-        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
     }
     if (url.endsWith('/otp/request')) {
         return json(200, { sent: true, expires_in: 600 });
@@ -101,7 +104,11 @@ function route(url: string, init?: RequestInit): Response {
         return identifyReplies.shift() ?? json(200, { access_token: 'akses-terverifikasi', expires_in: 900, refresh_token: 'rt-2', visitor_id: 'vis_1', trust_level: 'verified', conversation: null });
     }
     if (url.endsWith('/sessions')) {
-        return json(200, { access_token: 'akses', expires_in: 900, refresh_token: 'rt', visitor_id: 'vis_1', trust_level: 'anonymous', conversation: null, prechat_completed: prechatCompleted });
+        return json(200, { access_token: 'akses', expires_in: 900, refresh_token: 'rt', visitor_id: 'vis_1', trust_level: 'anonymous', conversation: null, prechat_completed: prechatCompleted, email_on_file: emailOnFile });
+    }
+    if (url.endsWith('/offline-messages')) {
+        const payload = body as { client_message_id: string };
+        return json(202, { message_id: 'wcm_off', client_message_id: payload.client_message_id, status: 'accepted', duplicate: false, email_on_file: true });
     }
     if (url.endsWith('/conversation')) {
         return json(200, { conversation: null, messages: [] });
@@ -141,6 +148,8 @@ describe('aplikasi widget (iframe)', () => {
         prechatConfig = null;
         prechatCompleted = false;
         teamOnline = null;
+        hours = null;
+        emailOnFile = false;
         identifyReplies.length = 0;
         socket.emitted.length = 0;
         socket.handlers.clear();
@@ -219,13 +228,13 @@ describe('aplikasi widget (iframe)', () => {
         const { app, container } = await startApp();
         app.command({ name: 'open', args: [] });
 
-        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(true);
         expect(container.querySelector('.pw-notice')?.textContent).toBe('Masuk ke akun Anda di website ini untuk mulai chat.');
 
         app.command({ name: 'identify', args: [{ token: 'jwt-pelanggan' }] });
         await settle();
         await settle();
-        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(false);
     });
 
 
@@ -243,7 +252,7 @@ describe('aplikasi widget (iframe)', () => {
         app.command({ name: 'open', args: [] });
         const form = container.querySelector('form.pw-prechat') as HTMLFormElement;
         expect(form.hidden).toBe(false);
-        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(true);
         expect((container.querySelector('.pw-prechat-skip') as HTMLButtonElement).hidden).toBe(true);
         expect(container.querySelector('label[for="pw-prechat-consent"]')?.textContent).toBe('Saya setuju data saya dipakai.');
 
@@ -266,7 +275,7 @@ describe('aplikasi widget (iframe)', () => {
             consent_version: 'v3',
         });
         expect(form.hidden).toBe(true);
-        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(false);
     });
 
 
@@ -321,7 +330,7 @@ describe('aplikasi widget (iframe)', () => {
         await settle();
         await settle();
         expect(panel.hidden).toBe(true);
-        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(false);
         expect(localStorage.getItem(`plasgos_webchat:${WIDGET_ID}:refresh`)).toBe('rt-otp');
     });
 
@@ -343,10 +352,83 @@ describe('aplikasi widget (iframe)', () => {
     });
 
 
+    it('di luar jam kerja (mode form): "Kami kembali …", formulir offline wajib email, kirim → pesan tampil & kotak tulis terbuka', async () => {
+        teamOnline = true;
+        hours = {
+            business_hours: { source: 'custom', open: false, next_open_at: '2099-11-02T14:00:00.000Z', timezone: 'America/New_York', always_open: false },
+            availability: { status: 'closed', reply_estimate_minutes: null },
+            offline: { mode: 'form', message: null },
+        };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const status = container.querySelector('.pw-team-status') as HTMLParagraphElement;
+        expect(status.textContent).toMatch(/^Kami kembali .*2 November.*09\.00/);
+        expect(status.dataset['online']).toBe('false');
+        const form = container.querySelector('.pw-offline') as HTMLFormElement;
+        expect(form.hidden).toBe(false);
+        expect(form.textContent).toContain('Kami sedang di luar jam kerja.');
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(true);
+
+        (container.querySelector('#pw-offline-message') as HTMLTextAreaElement).value = 'Ada stok ukuran 42?';
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+        expect((container.querySelector('#pw-offline-email-error') as HTMLParagraphElement).textContent).toBe('Wajib diisi.');
+        expect(sent.some((request) => request.url.endsWith('/offline-messages'))).toBe(false);
+
+        (container.querySelector('#pw-offline-email') as HTMLInputElement).value = 'Pembeli@Example.com';
+        (container.querySelector('#pw-offline-name') as HTMLInputElement).value = 'Pembeli';
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+        const request = sent.find((entry) => entry.url.endsWith('/offline-messages'));
+        expect(request?.body).toMatchObject({ text: 'Ada stok ukuran 42?', email: 'pembeli@example.com', name: 'Pembeli' });
+        expect(form.hidden).toBe(true);
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(false);
+        expect(container.querySelector('.pw-messages')?.textContent).toContain('Ada stok ukuran 42?');
+        expect((container.querySelector('.pw-notice') as HTMLDivElement).textContent).toBe('Tim sedang offline. Balasan juga kami kirim ke email Anda.');
+    });
+
+
+    it('jam kerja & tim online → estimasi balas di header; tim luring (away) dengan email diketahui → tanpa formulir', async () => {
+        teamOnline = true;
+        emailOnFile = true;
+        hours = {
+            business_hours: { source: 'chatroom_setting', open: true, next_open_at: null, timezone: 'Asia/Jakarta', always_open: false },
+            availability: { status: 'open', reply_estimate_minutes: 15 },
+            offline: { mode: 'form', message: 'Kami libur sebentar.' },
+        };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const status = container.querySelector('.pw-team-status') as HTMLParagraphElement;
+        expect(status.textContent).toBe('Tim sedang online · Biasanya membalas dalam ±15 menit');
+
+        socket.serverEmit('team.presence', { online: false, at: '2026-10-14T10:00:00.000Z' });
+        expect(status.textContent).toBe('Tim sedang offline — kami balas secepatnya');
+        expect((container.querySelector('.pw-offline') as HTMLFormElement).hidden).toBe(true);
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(false);
+    });
+
+
+    it('mode offline hidden: launcher disembunyikan bagi pengunjung tanpa percakapan; server lama (tanpa kolom) → tetap tampil', async () => {
+        hours = {
+            business_hours: { source: 'custom', open: false, next_open_at: null, timezone: 'Asia/Jakarta', always_open: false },
+            availability: { status: 'closed', reply_estimate_minutes: null },
+            offline: { mode: 'hidden', message: null },
+        };
+        const { port, container } = await startApp();
+        expect(last(port.frames)).toMatchObject({ state: 'hidden' });
+        expect((container.querySelector('.pw-team-status') as HTMLParagraphElement).textContent).toBe('Di luar jam kerja');
+
+        hours = null;
+        document.body.replaceChildren();
+        const fresh = await startApp();
+        expect(last(fresh.port.frames)).toMatchObject({ state: 'launcher' });
+    });
+
+
     it('kirim: pesan tampil seketika (mengirim…) lalu diterima server dengan id', async () => {
         const { app, container } = await startApp();
         app.command({ name: 'open', args: [] });
-        const input = container.querySelector('textarea') as HTMLTextAreaElement;
+        const input = container.querySelector('.pw-input') as HTMLTextAreaElement;
         input.value = 'Ukuran M masih ada?';
         (container.querySelector('form.pw-composer') as HTMLFormElement).dispatchEvent(new Event('submit', { cancelable: true }));
 
@@ -387,7 +469,7 @@ describe('aplikasi widget (iframe)', () => {
         socket.serverEmit('session.revoked', { reason: 'shutdown' });
 
         expect(container.querySelector('.pw-notice')?.textContent).toBe('Sesi chat berakhir. Muat ulang halaman untuk mulai lagi.');
-        expect((container.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(true);
         expect(last(port.events)).toEqual({ name: 'error', data: { code: 'session_revoked' } });
     });
 });

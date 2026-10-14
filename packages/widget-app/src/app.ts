@@ -11,11 +11,12 @@ import { FATAL_SESSION_CODES, SessionManager } from './session';
 import { NotificationSound } from './sound';
 import { createStore, storageKeys } from './storage';
 import type { KeyValueStore } from './storage';
-import { applyInboundStatus, INITIAL_STATE, lastServerTimestamp, Store, upsertMessages } from './store';
+import { applyInboundStatus, availabilityOf, INITIAL_STATE, lastServerTimestamp, Store, upsertMessages } from './store';
 import type { AppState } from './store';
 import { createTabChannel } from './tabs';
 import type { TabChannel } from './tabs';
-import type { ChatMessage, Locale, PageInfo, Session } from './types';
+import type { ChatMessage, Locale, PageInfo, Session, WidgetConfig } from './types';
+import type { OfflineValues } from './ui/offline';
 import type { PrechatValues } from './ui/prechat';
 import { ChatView } from './ui/view';
 
@@ -23,6 +24,9 @@ import { ChatView } from './ui/view';
 const RETRY_STEPS_MS = [2000, 5000, 10000, 30000];
 const TYPING_THROTTLE_MS = 2500;
 const TYPING_IDLE_MS = 3000;
+/** Konfigurasi (jam kerja, estimasi balas) dibaca ulang berkala; tepat saat jam buka tiba status dibuka lokal dulu. */
+const CONFIG_REFRESH_MS = 5 * 60 * 1000;
+const CONFIG_REFRESH_MIN_MS = 30 * 1000;
 
 /** Sisi loader yang dilihat aplikasi (postMessage ke halaman tenant). */
 export interface HostPort {
@@ -122,6 +126,8 @@ export class WidgetApp {
 
     private lastUnread = 0;
 
+    private configTimer: ReturnType<typeof setTimeout> | null = null;
+
 
     public constructor(private readonly env: AppEnvironment) {
         const win = env.window;
@@ -201,6 +207,9 @@ export class WidgetApp {
             },
             otpChangeEmail: () => {
                 this.updateOtp({ step: 'email', error: null });
+            },
+            submitOffline: (values) => {
+                void this.submitOffline(values);
             },
         });
         this.view.mount(env.container);
@@ -288,11 +297,8 @@ export class WidgetApp {
         try {
             if (!this.store.get().config) {
                 const config = await this.api.config(this.env.widgetId);
-                this.store.update({
-                    config,
-                    locale: resolveLocale(this.preferredLocale, config.appearance.locale_default ?? 'id'),
-                    teamOnline: config.team?.online ?? null,
-                });
+                this.applyConfig(config);
+                this.store.update({ locale: resolveLocale(this.preferredLocale, config.appearance.locale_default ?? 'id') });
             }
             const session = await this.session.start({
                 page_origin: this.hostOrigin,
@@ -311,6 +317,7 @@ export class WidgetApp {
                 notice: null,
                 connection: 'connecting',
                 prechatPending: this.needsPrechat(session),
+                emailOnFile: session.email_on_file === true,
             });
             // Selalu dari catatan pengunjung di server — `session.conversation` masih null bila pesan terakhir baru
             // diterima (antre) saat halaman dimuat ulang.
@@ -366,6 +373,112 @@ export class WidgetApp {
         this.realtime.disconnect();
         this.store.update({ notice: { code, fatal: true }, connection: 'idle' });
         this.env.host.event('error', { code });
+    }
+
+
+    /* ── ketersediaan (W5b) ── */
+
+    /** Konfigurasi baru → status tim, jam kerja, estimasi balas; penyegaran berikutnya dijadwalkan. */
+    private applyConfig(config: WidgetConfig): void {
+        this.store.update({
+            config,
+            teamOnline: config.team?.online ?? null,
+            hoursOpen: config.business_hours?.open ?? true,
+            nextOpenAt: config.business_hours?.next_open_at ?? null,
+            hoursTimezone: config.business_hours?.timezone ?? null,
+            replyEstimateMinutes: config.availability?.reply_estimate_minutes ?? null,
+        });
+        this.scheduleConfigRefresh();
+    }
+
+
+    /**
+     * Tiap 5 menit — atau tepat saat jam buka tiba (lebih cepat): status dibuka LOKAL dulu (respons konfigurasi boleh
+     * ter-cache ≤ 60 dtk), lalu konfigurasi dibaca ulang. Gagal membaca = keadaan lama dipertahankan.
+     */
+    private scheduleConfigRefresh(): void {
+        if (this.configTimer !== null) {
+            clearTimeout(this.configTimer);
+        }
+        const nextOpenAt = this.store.get().nextOpenAt;
+        const untilOpen = nextOpenAt ? Date.parse(nextOpenAt) - Date.now() : Number.POSITIVE_INFINITY;
+        const opensSoon = Number.isFinite(untilOpen) && untilOpen < CONFIG_REFRESH_MS;
+        const delay = opensSoon ? Math.max(untilOpen, 0) : CONFIG_REFRESH_MS;
+        this.configTimer = setTimeout(() => {
+            this.configTimer = null;
+            if (opensSoon) {
+                this.store.update({ hoursOpen: true, nextOpenAt: null });
+            }
+            void this.refreshConfig(opensSoon);
+        }, delay);
+    }
+
+
+    private async refreshConfig(justOpened: boolean): Promise<void> {
+        try {
+            const config = await this.api.config(this.env.widgetId);
+            // Tepat saat jam buka, salinan ter-cache bisa masih "tutup" — status lokal dipertahankan sampai salinan
+            // baru tiba.
+            if (justOpened && config.business_hours?.open === false) {
+                this.store.update({ config, teamOnline: config.team?.online ?? this.store.get().teamOnline });
+                this.configTimer = setTimeout(() => {
+                    this.configTimer = null;
+                    void this.refreshConfig(false);
+                }, CONFIG_REFRESH_MIN_MS * 2);
+                return;
+            }
+            this.applyConfig(config);
+        } catch {
+            this.scheduleConfigRefresh();
+        }
+    }
+
+
+    /**
+     * Formulir "tinggalkan pesan" (W5b): pesan + email → `POST /offline-messages`. Pesan tampil di percakapan seperti
+     * pesan biasa; setelah itu pengunjung menulis lewat kotak tulis (alamat balasan sudah diketahui).
+     */
+    private async submitOffline(values: OfflineValues): Promise<void> {
+        if (this.store.get().offlineBusy) {
+            return;
+        }
+        this.store.update({ offlineBusy: true, offlineError: null });
+        const clientMessageId = this.env.window.crypto.randomUUID();
+        try {
+            const result = await this.session.withToken((token) => this.api.offlineMessage(token, {
+                client_message_id: clientMessageId,
+                text: values.text,
+                email: values.email,
+                ...(values.name ? { name: values.name } : {}),
+                page: this.page,
+            }));
+            const message: ChatMessage = {
+                id: result.message_id,
+                client_message_id: clientMessageId,
+                direction: 'inbound',
+                sender: { kind: 'customer', name: null },
+                type: 'text',
+                text: values.text,
+                status: 'accepted',
+                timestamp: new Date().toISOString(),
+            };
+            this.store.update((state) => ({
+                messages: upsertMessages(state.messages, [message]),
+                emailOnFile: true,
+                offlineBusy: false,
+                prechatPending: false,
+                notice: state.notice?.fatal ? state.notice : null,
+            }));
+            this.tabs.post({ type: 'sent', message });
+            this.view.offlineSubmitted();
+        } catch (error) {
+            if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
+                this.store.update({ offlineBusy: false });
+                this.fatal(error.code);
+                return;
+            }
+            this.store.update({ offlineBusy: false, offlineError: error instanceof ApiError ? error.code : 'unknown' });
+        }
     }
 
 
@@ -710,7 +823,7 @@ export class WidgetApp {
         } else if (message.type === 'shutdown') {
             this.realtime.disconnect();
             this.session.clear();
-            this.store.update({ messages: [], unread: 0, conversationId: null, trustLevel: null });
+            this.store.update({ messages: [], unread: 0, conversationId: null, trustLevel: null, emailOnFile: false });
         }
     }
 
@@ -734,9 +847,16 @@ export class WidgetApp {
         const body = { fields: values, ...(consentVersion ? { consent_version: consentVersion } : {}) };
         try {
             const result = await this.session.withToken((token) => this.api.prechat(token, body));
-            this.store.update({
-                prechatPending: false, prechatBusy: false, trustLevel: result.trust_level, notice: null,
-            });
+            // Email di formulir pre-chat = alamat balasan (server mencatatnya) — formulir offline tak bertanya lagi.
+            const emailField = this.store.get().config?.prechat?.fields.find((field) => field.type === 'email');
+            const gaveEmail = emailField !== undefined && typeof values[emailField.key] === 'string';
+            this.store.update((state) => ({
+                prechatPending: false,
+                prechatBusy: false,
+                trustLevel: result.trust_level,
+                notice: null,
+                emailOnFile: state.emailOnFile || gaveEmail,
+            }));
             this.view.focusInput();
         } catch (error) {
             this.store.update({ prechatBusy: false, prechatError: error instanceof ApiError ? error.code : 'unknown' });
@@ -770,7 +890,9 @@ export class WidgetApp {
         this.updateOtp({ busy: true, error: null });
         try {
             const session = await this.session.verifyOtp(email, code);
-            this.store.update({ otp: null, trustLevel: session.trust_level, prechatPending: false, notice: null });
+            this.store.update({
+                otp: null, trustLevel: session.trust_level, prechatPending: false, notice: null, emailOnFile: true,
+            });
             await this.syncHistory();
             this.realtime.reconnect();
             this.view.focusInput();
@@ -811,7 +933,12 @@ export class WidgetApp {
             const session = await this.session.identify(identityToken);
             const conversationId = session.conversation?.id ?? this.store.get().conversationId;
             // Pelanggan terverifikasi tak perlu memperkenalkan diri lagi.
-            this.store.update({ trustLevel: session.trust_level, conversationId, prechatPending: false });
+            this.store.update((state) => ({
+                trustLevel: session.trust_level,
+                conversationId,
+                prechatPending: false,
+                emailOnFile: state.emailOnFile || session.email_on_file === true,
+            }));
             await this.syncHistory();
             this.realtime.reconnect();
         } catch (error) {
@@ -859,18 +986,30 @@ export class WidgetApp {
         await this.session.shutdown();
         this.store.update({
             messages: [], unread: 0, conversationId: null, trustLevel: null, open: false, prechatPending: false,
+            emailOnFile: false,
         });
     }
 
 
     /* ── tampilan & laporan ke loader ── */
 
+    /**
+     * Mode offline `hidden` (W5b): saat tim tak `open`, launcher disembunyikan bagi pengunjung yang BELUM punya
+     * percakapan; yang sedang bercakap tetap melihatnya (balasan tim tetap sampai).
+     */
+    private hiddenWhileOffline(state: AppState): boolean {
+        return state.config?.offline?.mode === 'hidden' && Boolean(state.config.availability)
+            && availabilityOf(state) !== 'open' && state.conversationId === null && state.messages.length === 0;
+    }
+
+
     private render(state: AppState): void {
         const stopped = state.notice?.fatal === true && !state.open;
         // Launcher disembunyikan oleh website (opsi `hideLauncher`) ATAU pengaturan tenant di dashboard
         // (`appearance.hide_launcher`) — chat dibuka lewat tombol website sendiri (`Plasgos("open")`).
         const hiddenBySettings = state.config?.appearance.hide_launcher === true;
-        const launcherHidden = this.hideLauncher || hiddenBySettings || state.config === null || stopped;
+        const launcherHidden = this.hideLauncher || hiddenBySettings || state.config === null || stopped
+            || this.hiddenWhileOffline(state);
         const layout = frameLayout(state.open, state.config?.appearance ?? {}, this.viewport, launcherHidden);
         this.view.render(state, { fullscreen: this.viewport.width < MOBILE_BREAKPOINT, hideLauncher: layout.state === 'hidden' });
         const layoutKey = JSON.stringify(layout);

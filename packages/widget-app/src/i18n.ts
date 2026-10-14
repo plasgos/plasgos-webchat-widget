@@ -23,6 +23,17 @@ const DICTIONARY = {
         verifyHuman: 'Selesaikan verifikasi singkat untuk mulai chat.',
         teamOnline: 'Tim sedang online',
         teamOffline: 'Tim sedang offline — kami balas secepatnya',
+        replyEstimateMinutes: 'Biasanya membalas dalam ±{minutes} menit',
+        replyEstimateHours: 'Biasanya membalas dalam ±{hours} jam',
+        closedNow: 'Di luar jam kerja',
+        backAt: 'Kami kembali {when}',
+        offlineIntroClosed: 'Kami sedang di luar jam kerja. Tinggalkan pesan, kami balas lewat email.',
+        offlineIntroAway: 'Tim sedang offline. Tinggalkan pesan, kami balas lewat email.',
+        offlineMessageLabel: 'Pesan',
+        offlineEmailLabel: 'Email untuk balasan',
+        offlineNameLabel: 'Nama (opsional)',
+        offlineSubmit: 'Kirim pesan',
+        offlineEmailOnFile: 'Tim sedang offline. Balasan juga kami kirim ke email Anda.',
         identityRequired: 'Masuk ke akun Anda di website ini untuk mulai chat.',
         otpEntry: 'Verifikasi lewat email',
         otpEmailTitle: 'Verifikasi email Anda',
@@ -87,6 +98,17 @@ const DICTIONARY = {
         verifyHuman: 'Complete a quick check to start chatting.',
         teamOnline: 'The team is online',
         teamOffline: 'The team is offline — we will reply as soon as we can',
+        replyEstimateMinutes: 'Usually replies in about {minutes} minutes',
+        replyEstimateHours: 'Usually replies in about {hours} hours',
+        closedNow: 'Outside business hours',
+        backAt: 'We are back {when}',
+        offlineIntroClosed: 'We are outside business hours. Leave a message and we will reply by email.',
+        offlineIntroAway: 'The team is offline. Leave a message and we will reply by email.',
+        offlineMessageLabel: 'Message',
+        offlineEmailLabel: 'Email for our reply',
+        offlineNameLabel: 'Name (optional)',
+        offlineSubmit: 'Send message',
+        offlineEmailOnFile: 'The team is offline. We will also send our reply to your email.',
         identityRequired: 'Sign in to your account on this website to start chatting.',
         otpEntry: 'Verify with email',
         otpEmailTitle: 'Verify your email',
@@ -144,6 +166,39 @@ export function translate(locale: Locale, key: MessageKey, vars: Vars = {}): str
 export function errorText(locale: Locale, code: string | null, vars: Vars = {}): string {
     const key = `error_${code ?? 'unknown'}`;
     return key in DICTIONARY[locale] ? translate(locale, key as MessageKey, vars) : translate(locale, 'error_unknown');
+}
+
+const WEEK_MS = 6 * 24 * 3600 * 1000;
+
+/**
+ * Waktu buka berikutnya untuk "Kami kembali …", di ZONA WAKTU jam kerja (bukan zona peramban) dengan singkatan zona
+ * — pengunjung di zona lain tetap tahu jam berapa itu. Lebih dari ~seminggu lagi → tanggal ikut disebut.
+ */
+export function formatNextOpen(locale: Locale, iso: string, timezone: string | null, now = Date.now()): string {
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) {
+        return '';
+    }
+    const far = at.getTime() - now > WEEK_MS;
+    const options: Intl.DateTimeFormatOptions = {
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short',
+        ...(far ? { day: 'numeric', month: 'long' } : {}),
+    };
+    try {
+        return new Intl.DateTimeFormat(locale === 'id' ? 'id-ID' : 'en-US', { ...options, ...(timezone ? { timeZone: timezone } : {}) }).format(at);
+    } catch {
+        return new Intl.DateTimeFormat(locale === 'id' ? 'id-ID' : 'en-US', options).format(at);
+    }
+}
+
+/** "±15 menit" / "±2 jam" — di atas 90 menit dibulatkan ke jam. */
+export function replyEstimateText(locale: Locale, minutes: number): string {
+    return minutes > 90
+        ? translate(locale, 'replyEstimateHours', { hours: Math.round(minutes / 60) })
+        : translate(locale, 'replyEstimateMinutes', { minutes: Math.max(1, Math.round(minutes)) });
 }
 
 export function resolveLocale(preferred: string | undefined, fallback: Locale): Locale {

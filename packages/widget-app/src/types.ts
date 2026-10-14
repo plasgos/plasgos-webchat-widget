@@ -44,6 +44,33 @@ export interface IdentitySettings {
     readonly otp_email?: boolean;
 }
 
+/**
+ * Saat tim tidak `open` (W5b): `form` = tinggalkan pesan + email; `hidden` = launcher disembunyikan bagi pengunjung
+ * tanpa percakapan; `ai` = AI melayani (W6a — sampai itu diperlakukan `form`).
+ */
+export interface OfflineSettings {
+    readonly mode: 'form' | 'ai' | 'hidden';
+    /** Teks tenant untuk keadaan offline; null = teks bawaan widget. */
+    readonly message: string | null;
+}
+
+/** Jam kerja saat konfigurasi dibaca (W5b). `next_open_at` hanya bila sedang tutup. */
+export interface BusinessHours {
+    readonly source: 'chatroom_setting' | 'custom';
+    readonly open: boolean;
+    readonly next_open_at: string | null;
+    readonly timezone: string | null;
+    readonly always_open: boolean;
+}
+
+export type AvailabilityStatus = 'open' | 'away' | 'closed';
+
+export interface Availability {
+    readonly status: AvailabilityStatus;
+    /** Target balasan pertama kebijakan SLA (menit); hanya saat `open`. */
+    readonly reply_estimate_minutes: number | null;
+}
+
 export interface WidgetConfig {
     readonly widget_id: string;
     readonly appearance: Appearance;
@@ -52,6 +79,10 @@ export interface WidgetConfig {
     readonly privacy?: PrivacySettings;
     /** Status tim saat konfigurasi dibaca (W5a); perubahan berikutnya lewat socket `team.presence`. */
     readonly team?: { readonly online: boolean | null } | null;
+    readonly offline?: OfflineSettings;
+    /** Server lama tak mengirimnya → dianggap selalu buka. */
+    readonly business_hours?: BusinessHours | null;
+    readonly availability?: Availability | null;
     readonly captcha: { readonly mode: string; readonly provider: 'turnstile' | null; readonly site_key: string | null };
 }
 
@@ -64,6 +95,8 @@ export interface Session {
     readonly conversation: { readonly id: string } | null;
     /** Formulir pre-chat sudah dikirim pengunjung ini (W4b). Server lama tak mengirimnya → dianggap belum. */
     readonly prechat_completed?: boolean;
+    /** Alamat balasan pengunjung sudah diketahui (W5b) — formulir offline tak menanyakan email lagi. */
+    readonly email_on_file?: boolean;
 }
 
 export interface OtpRequestResult {
@@ -95,6 +128,11 @@ export interface SendResult {
     readonly client_message_id: string;
     readonly status: string;
     readonly duplicate: boolean;
+}
+
+/** `POST /offline-messages` (W5b): pesan diterima seperti pesan biasa + alamat balasan tersimpan. */
+export interface OfflineMessageResult extends SendResult {
+    readonly email_on_file: boolean;
 }
 
 export interface ConversationPage {

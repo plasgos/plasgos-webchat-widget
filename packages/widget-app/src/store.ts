@@ -1,4 +1,4 @@
-import type { ChatMessage, Locale, WidgetConfig } from './types';
+import type { AvailabilityStatus, ChatMessage, Locale, WidgetConfig } from './types';
 
 /** Urutan status pesan; status TAK PERNAH mundur (read tak diturunkan delivered yang datang terlambat). */
 const STATUS_RANK: Readonly<Record<string, number>> = {
@@ -43,6 +43,16 @@ export interface AppState {
     readonly otp: OtpState | null;
     /** Ada agen siap melayani: true/false; null = tak diketahui (tak ditampilkan). */
     readonly teamOnline: boolean | null;
+    /** Jam kerja (W5b): false = di luar jam kerja; diperbarui berkala dari konfigurasi. */
+    readonly hoursOpen: boolean;
+    readonly nextOpenAt: string | null;
+    readonly hoursTimezone: string | null;
+    readonly replyEstimateMinutes: number | null;
+    /** Alamat balasan pengunjung sudah diketahui — formulir offline tak perlu ditampilkan. */
+    readonly emailOnFile: boolean;
+    readonly offlineBusy: boolean;
+    /** Kode galat kiriman formulir offline terakhir, atau null. */
+    readonly offlineError: string | null;
 }
 
 export interface OtpState {
@@ -71,7 +81,32 @@ export const INITIAL_STATE: AppState = {
     prechatError: null,
     otp: null,
     teamOnline: null,
+    hoursOpen: true,
+    nextOpenAt: null,
+    hoursTimezone: null,
+    replyEstimateMinutes: null,
+    emailOnFile: false,
+    offlineBusy: false,
+    offlineError: null,
 };
+
+/**
+ * Ketersediaan saat ini: di luar jam kerja → `closed`; jam kerja tanpa agen daring → `away`; selain itu `open`
+ * (status tim tak diketahui = dianggap buka — chat tak pernah tertutup karena data presence hilang).
+ */
+export function availabilityOf(state: AppState): AvailabilityStatus {
+    if (!state.hoursOpen) {
+        return 'closed';
+    }
+    return state.teamOnline === false ? 'away' : 'open';
+}
+
+/** Formulir "tinggalkan pesan" (W5b): tim tak `open`, mode bukan `hidden`, alamat balasan belum diketahui. */
+export function needsOfflineForm(state: AppState): boolean {
+    const mode = state.config?.offline?.mode ?? 'form';
+    return availabilityOf(state) !== 'open' && mode !== 'hidden' && !state.emailOnFile
+        && state.config?.availability !== undefined && state.config.availability !== null;
+}
 
 function rank(status: string | null): number {
     return status === null ? 0 : STATUS_RANK[status] ?? 0;

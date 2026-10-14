@@ -1,4 +1,7 @@
-import type { ConversationPage, OtpRequestResult, PageInfo, PrechatResult, SendResult, Session, WidgetConfig } from './types';
+import type {
+    ConversationPage, OfflineMessageResult, OtpRequestResult, PageInfo, PrechatResult, SendResult, Session,
+    WidgetConfig,
+} from './types';
 
 /**
  * Galat API publik dengan kode stabil (`error_code` server) — teks untuk pengunjung dipilih dari kode, bukan dari
@@ -41,6 +44,15 @@ export interface BootBody {
     readonly page?: PageInfo & { readonly referrer?: string };
     readonly locale?: string;
     readonly captcha_token?: string;
+}
+
+export interface OfflineMessageBody {
+    readonly client_message_id: string;
+    readonly text: string;
+    /** Wajib bila alamat balasan belum diketahui (`email_on_file` false). */
+    readonly email?: string;
+    readonly name?: string;
+    readonly page?: PageInfo;
 }
 
 export interface PrechatBody {
@@ -102,6 +114,12 @@ export class PublicApi {
         body: { client_message_id: string; text: string; page?: PageInfo },
     ): Promise<SendResult> {
         return this.request('POST', '/messages', { token, body });
+    }
+
+
+    /** Pesan saat tim offline (W5b): masuk percakapan seperti pesan biasa + konfirmasi ke email pengunjung. */
+    public offlineMessage(token: string, body: OfflineMessageBody): Promise<OfflineMessageResult> {
+        return this.request('POST', '/offline-messages', { token, body });
     }
 
 

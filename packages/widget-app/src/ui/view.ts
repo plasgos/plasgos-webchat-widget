@@ -1,9 +1,12 @@
 import { safeColor, textOn } from '../colors';
 import type { MessageKey } from '../i18n';
-import { errorText, translate } from '../i18n';
+import { errorText, formatNextOpen, replyEstimateText, translate } from '../i18n';
 import { renderMarkdown } from '../markdown';
+import { availabilityOf, needsOfflineForm } from '../store';
 import type { AppState } from '../store';
 import type { ChatMessage } from '../types';
+import { OfflineForm } from './offline';
+import type { OfflineValues } from './offline';
 import { OtpPanel } from './otp';
 import { PrechatForm } from './prechat';
 import type { PrechatValues } from './prechat';
@@ -23,6 +26,7 @@ export interface ViewActions {
     readonly requestOtp: (email: string) => void;
     readonly verifyOtp: (code: string) => void;
     readonly otpChangeEmail: () => void;
+    readonly submitOffline: (values: OfflineValues) => void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -55,6 +59,34 @@ function messageKey(message: ChatMessage): string {
 /** `identity.verification: "required"`: pengunjung belum terverifikasi tak bisa menulis (server juga menolak). */
 function needsIdentity(state: AppState): boolean {
     return state.config?.identity?.verification === 'required' && state.trustLevel !== 'verified';
+}
+
+
+/** Formulir offline tampil (W5b) — kecuali widget menunggu verifikasi identitas/captcha (itu didahulukan). */
+function showsOfflineForm(state: AppState): boolean {
+    return needsOfflineForm(state) && !needsIdentity(state) && state.captchaSiteKey === null
+        && state.notice?.fatal !== true;
+}
+
+
+/**
+ * Baris status di header: tutup → "Kami kembali Senin 09.00 WIB"; away → tim offline; buka → tim online + estimasi
+ * balas (bila ada kebijakan SLA). null = baris disembunyikan.
+ */
+function teamStatusOf(state: AppState): { text: string; online: boolean } | null {
+    const status = availabilityOf(state);
+    if (status === 'closed') {
+        const when = state.nextOpenAt ? formatNextOpen(state.locale, state.nextOpenAt, state.hoursTimezone) : '';
+        return { text: when ? translate(state.locale, 'backAt', { when }) : translate(state.locale, 'closedNow'), online: false };
+    }
+    if (status === 'away') {
+        return { text: translate(state.locale, 'teamOffline'), online: false };
+    }
+    const estimate = state.replyEstimateMinutes ? replyEstimateText(state.locale, state.replyEstimateMinutes) : null;
+    if (state.teamOnline === true) {
+        return { text: estimate ? `${translate(state.locale, 'teamOnline')} · ${estimate}` : translate(state.locale, 'teamOnline'), online: true };
+    }
+    return estimate ? { text: estimate, online: false } : null;
 }
 
 
@@ -100,6 +132,8 @@ export class ChatView {
     private readonly otp: OtpPanel;
 
     private readonly otpEntry: HTMLButtonElement;
+
+    private readonly offline: OfflineForm;
 
     private readonly input: HTMLTextAreaElement;
 
@@ -151,6 +185,7 @@ export class ChatView {
             verify: actions.verifyOtp,
             changeEmail: actions.otpChangeEmail,
         });
+        this.offline = new OfflineForm(doc, { submit: actions.submitOffline });
         this.otpEntry = this.element('button', 'pw-otp-entry');
         this.otpEntry.type = 'button';
         this.otpEntry.addEventListener('click', () => {
@@ -170,7 +205,7 @@ export class ChatView {
         composer.append(label, this.input, this.sendButton);
         this.window.append(
             header, this.notice, this.otpEntry, this.list, this.typingLine, this.captcha, this.prechat.element,
-            this.otp.element, composer,
+            this.otp.element, this.offline.element, composer,
         );
         this.root.append(this.launcher, this.window);
 
@@ -189,6 +224,13 @@ export class ChatView {
 
 
     public focusInput(): void {
+        this.input.focus();
+    }
+
+
+    /** Formulir offline terkirim — isian dikosongkan, fokus ke kotak tulis. */
+    public offlineSubmitted(): void {
+        this.offline.reset();
         this.input.focus();
     }
 
@@ -223,9 +265,10 @@ export class ChatView {
         this.title.textContent = look.team_title ?? t('defaultTitle');
         this.greeting.textContent = look.greeting ?? '';
         this.greeting.hidden = !look.greeting;
-        this.teamStatus.hidden = state.teamOnline === null;
-        this.teamStatus.dataset['online'] = String(state.teamOnline === true);
-        this.teamStatus.textContent = state.teamOnline === null ? '' : t(state.teamOnline ? 'teamOnline' : 'teamOffline');
+        const teamStatus = teamStatusOf(state);
+        this.teamStatus.hidden = teamStatus === null;
+        this.teamStatus.dataset['online'] = String(teamStatus?.online === true);
+        this.teamStatus.textContent = teamStatus?.text ?? '';
         this.logo.hidden = !look.logo_url;
         if (look.logo_url && this.logo.src !== look.logo_url) {
             this.logo.src = look.logo_url;
@@ -240,8 +283,17 @@ export class ChatView {
         this.captcha.hidden = state.captchaSiteKey === null;
         this.input.placeholder = t('inputPlaceholder');
         this.sendButton.setAttribute('aria-label', t('send'));
+        const offlineForm = showsOfflineForm(state);
+        const offlineMode = state.config?.offline;
+        this.offline.render(offlineForm ? {
+            intro: offlineMode?.message ?? t(availabilityOf(state) === 'closed' ? 'offlineIntroClosed' : 'offlineIntroAway'),
+            busy: state.offlineBusy,
+            error: state.offlineError ? errorText(state.locale, state.offlineError) : null,
+            t,
+        } : null);
         const prechat = state.config?.prechat;
-        this.prechat.render(state.prechatPending && prechat ? {
+        // Formulir offline menggantikan pre-chat (server mencatat pre-chat terpenuhi saat pesan offline dikirim).
+        this.prechat.render(state.prechatPending && prechat && !offlineForm ? {
             fields: prechat.fields,
             optional: prechat.mode === 'optional',
             consentText: state.config.privacy?.consent_text ?? null,
@@ -261,7 +313,7 @@ export class ChatView {
             t,
         } : null);
         const blocked = state.notice?.fatal === true || state.captchaSiteKey !== null || state.config === null
-            || needsIdentity(state) || state.prechatPending;
+            || needsIdentity(state) || state.prechatPending || offlineForm;
         this.input.disabled = blocked;
         this.sendButton.disabled = blocked;
     }
@@ -282,6 +334,16 @@ export class ChatView {
             this.notice.dataset['tone'] = 'info';
             this.notice.setAttribute('role', 'status');
             this.notice.textContent = translate(state.locale, 'identityRequired');
+            return;
+        }
+
+        // Tim offline tetapi alamat balasan sudah diketahui: pengunjung menulis biasa, balasan juga lewat email.
+        if (availabilityOf(state) !== 'open' && state.emailOnFile && state.config?.offline?.mode !== 'hidden'
+            && state.config?.availability && state.connection === 'online') {
+            this.notice.hidden = false;
+            this.notice.dataset['tone'] = 'info';
+            this.notice.setAttribute('role', 'status');
+            this.notice.textContent = translate(state.locale, 'offlineEmailOnFile');
             return;
         }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { contrastRatio, safeColor, textOn } from '../src/colors';
-import { errorText, resolveLocale } from '../src/i18n';
+import { errorText, formatNextOpen, replyEstimateText, resolveLocale } from '../src/i18n';
 import { frameLayout, LAUNCHER_FRAME, WINDOW_WIDTH } from '../src/layout';
 
 describe('warna tenant', () => {
@@ -23,6 +23,21 @@ describe('teks', () => {
         expect(errorText('id', 'rate_limited', { seconds: 12 })).toBe('Terlalu banyak permintaan. Coba lagi dalam 12 detik.');
         expect(errorText('en', 'tidak_dikenal')).toBe('Something went wrong. Please try again.');
         expect(resolveLocale('fr', 'en')).toBe('en');
+    });
+});
+
+describe('ketersediaan (W5b)', () => {
+    it('waktu buka berikutnya di zona waktu jam kerja (bukan zona peramban) + singkatan zona; jauh → tanggal disebut', () => {
+        const now = Date.parse('2026-10-19T22:00:00Z');
+        expect(formatNextOpen('en', '2026-10-20T13:00:00Z', 'America/New_York', now)).toBe('Tuesday, 09:00 AM EDT');
+        expect(formatNextOpen('id', '2026-11-02T14:00:00Z', 'America/New_York', now)).toMatch(/Senin.*2 November.*09\.00/);
+        expect(formatNextOpen('id', 'bukan-tanggal', 'Asia/Jakarta', now)).toBe('');
+    });
+
+
+    it('estimasi balas: menit, di atas 90 menit dibulatkan ke jam', () => {
+        expect(replyEstimateText('id', 15)).toBe('Biasanya membalas dalam ±15 menit');
+        expect(replyEstimateText('en', 240)).toBe('Usually replies in about 4 hours');
     });
 });
 
