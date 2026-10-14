@@ -15,8 +15,13 @@ const style = {
     'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
 };
 
+// Aplikasi meta-framework (fixtures/apps) butuh dependensinya terinstal (`pnpm apps:build`) agar lint bertipe benar →
+// hanya di-lint lewat `pnpm lint:apps`, bukan `pnpm lint` sehari-hari.
+const appsIgnored = process.env['LINT_APPS'] === '1' ? [] : ['fixtures/apps/**'];
+
 export default tseslint.config(
-    { ignores: ['**/dist/**', '**/node_modules/**', '**/.svelte-kit/**', 'coverage/**', 'test-results/**', 'playwright-report/**', '.lighthouse/**',
+    { ignores: [...appsIgnored, '**/dist/**', '**/node_modules/**', '**/.svelte-kit/**', 'coverage/**', 'test-results/**',
+        'playwright-report/**', '.lighthouse/**',
         // Keluaran build & berkas bangkitan aplikasi meta-framework (fixtures/apps).
         '**/.next/**', '**/.nuxt/**', '**/.output/**', '**/.react-router/**', '**/.angular/**', 'fixtures/apps/*/build/**', 'fixtures/apps/*/dist/**', '**/.astro/**',
         'fixtures/apps/.packs/**', '**/next-env.d.ts'] },

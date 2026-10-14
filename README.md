@@ -19,6 +19,7 @@ Kontrak & rancangan tinggal di api-crm, `server/modules/webchat/docs/`:
 | `packages/webchat` (`@plasgos/webchat`) | npm | Paket inti untuk aplikasi berbundler; ESM + CJS + tipe; aman SSR |
 | wrapper React / Vue / Angular / Svelte | npm (W3e) | Pola idiomatis per framework, memanggil paket inti |
 | `fixtures/*` | — | Website uji per kasus (CSP ketat, framework) untuk e2e & Lighthouse |
+| `fixtures/apps/*` | — | Aplikasi meta-framework build produksi (Next 14/15, React Router, Nuxt 3, Angular SSR, SvelteKit, Astro) |
 
 Widget yang sebenarnya selalu sama (aplikasi di iframe); yang berbeda per framework hanya cara memanggil loader.
 
@@ -98,6 +99,33 @@ const off = getWebchat().on('unread_changed', ({ count }) => …);
 | `@plasgos/webchat-vue` | `app.use(PlasgosWebchatPlugin, { widgetId, router })` + `usePlasgosWebchat()` (klien + `state` reaktif + `setIdentityToken`). Navigasi dari `router.afterEach` (hanya URL yang berubah); Nuxt 3 lewat plugin `.client`. |
 | `@plasgos/webchat-angular` | `providePlasgosWebchat({ widgetId })` di `bootstrapApplication` + `inject(PlasgosWebchatService)` (`state` signal, `setIdentityToken`). Boot setelah render pertama di luar zona (aman SSR & zoneless), navigasi dari `NavigationEnd`. Angular 17–22, tanpa decorator (tsup biasa). |
 | `@plasgos/webchat-svelte` | `<PlasgosWebchat widgetId identityToken pathname />` (Svelte 5, runes) + `webchat` & store `webchatState`. SvelteKit: `pathname={page.url.pathname}`. Dikemas `svelte-package` (sumber `.svelte`). |
+
+## Matriks meta-framework (SSR)
+
+`fixtures/apps/*` = aplikasi sungguhan dengan perangkatnya sendiri, dibangun produksi dan dijalankan servernya
+(`e2e-apps/`). Paket dipasang dari tarball `pnpm pack` (isi yang dipublikasikan) di luar workspace, seperti website
+tenant memasang dari registry — satu salinan React/Vue/… milik aplikasi.
+
+```bash
+pnpm build
+pnpm apps:build                 # kemas paket → instal & build tiap aplikasi (APPS=next15,astro membatasi)
+pnpm lint:apps
+PW_CHROMIUM_CHANNEL=chrome pnpm e2e:apps
+```
+
+Setiap aplikasi diuji: render server + hidrasi tanpa galat/peringatan console, tepat satu iframe, navigasi klien
+(Link/NuxtLink/routerLink/View Transitions) dilaporkan SEKALI dengan URL tujuan, dan iframe yang SAMA bertahan
+lintas navigasi (tanpa handshake ulang).
+
+| Aplikasi | Port | Cara pasang yang diuji |
+|---|---|---|
+| `next15` | 4511 | `@plasgos/webchat-react` — App Router (komponen klien, `usePathname`) & Pages Router (`_app`, `router.asPath`) |
+| `next14` | 4512 | sama, React 18 |
+| `react-router` | 4513 | React Router 8 mode framework (penerus Remix), `useLocation` di root |
+| `nuxt3` | 4514 | `@plasgos/webchat-vue` lewat `plugins/*.client.ts` + router Nuxt |
+| `angular-ssr` | 4515 | `providePlasgosWebchat` + `@angular/ssr` (express), hidrasi, zoneless |
+| `sveltekit` | 4516 | `@plasgos/webchat-svelte` di layout akar, `page` dari `$app/state` (SvelteKit 3: konfigurasi lewat plugin Vite) |
+| `astro` | 4517 | `loadWebchat` dalam `<script>` layout + View Transitions (`ClientRouter`) |
 
 ## Uji live terhadap api-crm
 

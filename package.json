@@ -12,6 +12,7 @@
     "build": "pnpm -r run build && node scripts/build-fixtures.mjs",
     "typecheck": "pnpm -r run typecheck && tsc -p e2e/tsconfig.json --noEmit && tsc -p e2e-live/tsconfig.json --noEmit && tsc -p e2e-apps/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit && tsc -p fixtures/tsconfig.json --noEmit",
     "lint": "eslint .",
+    "lint:apps": "LINT_APPS=1 eslint fixtures/apps",
     "test": "vitest run",
     "size": "node scripts/size-budget.mjs",
     "e2e": "playwright test",
