@@ -74,6 +74,8 @@ let teamOnline: boolean | null = null;
 /** Jam kerja & ketersediaan di konfigurasi (W5b); null = server lama (tanpa kolom). */
 let hours: { business_hours: unknown; availability: unknown; offline: unknown } | null = null;
 let emailOnFile = false;
+/** Jawaban `GET /conversation` (W5c); null = tanpa percakapan. */
+let history: Record<string, unknown> | null = null;
 /** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
 const identifyReplies: Response[] = [];
 
@@ -111,7 +113,15 @@ function route(url: string, init?: RequestInit): Response {
         return json(202, { message_id: 'wcm_off', client_message_id: payload.client_message_id, status: 'accepted', duplicate: false, email_on_file: true });
     }
     if (url.endsWith('/conversation')) {
-        return json(200, { conversation: null, messages: [] });
+        return json(200, history ?? { conversation: null, survey: null, messages: [] });
+    }
+    if (url.endsWith('/csat')) {
+        const payload = body as { score?: number; comment?: string };
+        const survey = { status: 'answered', scale: 5, score: payload.score ?? 4, satisfied: true, comment: payload.comment ?? null, comment_allowed: !payload.comment, sent_at: null, expires_at: null, answered_at: '2026-10-15T03:00:00.000Z' };
+        return json(200, { survey });
+    }
+    if (url.endsWith('/transcript')) {
+        return json(202, { sent: true, email_on_file: true });
     }
     if (url.endsWith('/messages')) {
         const payload = body as { client_message_id: string };
@@ -150,6 +160,7 @@ describe('aplikasi widget (iframe)', () => {
         teamOnline = null;
         hours = null;
         emailOnFile = false;
+        history = null;
         identifyReplies.length = 0;
         socket.emitted.length = 0;
         socket.handlers.clear();
@@ -422,6 +433,80 @@ describe('aplikasi widget (iframe)', () => {
         document.body.replaceChildren();
         const fresh = await startApp();
         expect(last(fresh.port.frames)).toMatchObject({ state: 'launcher' });
+    });
+
+
+    it('survei kepuasan: kartu skor di pesan survei (pilihan bernomor disembunyikan) → skor & komentar lewat POST /csat', async () => {
+        history = {
+            conversation: { id: 'cv_1', status: 'resolved', resolved_at: '2026-10-15T02:00:00.000Z' },
+            survey: { status: 'sent', scale: 5, score: null, satisfied: null, comment: null, comment_allowed: false, sent_at: '2026-10-15T02:05:00.000Z', expires_at: '2026-10-17T02:05:00.000Z', answered_at: null },
+            messages: [{ id: 'wco_s', client_message_id: null, direction: 'outbound', sender: { kind: 'system', name: 'Survei Kepuasan' }, type: 'text', text: 'Seberapa puas Anda?\n\n1) ⭐ 1\n2) ⭐ 2\n\nBalas dengan angka 1–5.', status: 'sent', timestamp: '2026-10-15T02:05:00.000Z', survey: { kind: 'rating', scale: 5 } }],
+        };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const bubble = container.querySelector('.pw-msg .pw-bubble') as HTMLDivElement;
+        expect(bubble.textContent).toBe('Seberapa puas Anda?');
+        const options = [...container.querySelectorAll<HTMLButtonElement>('.pw-survey-option')];
+        expect(options).toHaveLength(5);
+        expect(options[3]?.getAttribute('aria-label')).toBe('4 dari 5');
+        expect((container.querySelector('.pw-notice') as HTMLDivElement).textContent).toContain('ditandai selesai');
+
+        options[3]?.click();
+        await settle();
+        expect(sent.find((entry) => entry.url.endsWith('/csat'))?.body).toEqual({ score: 4 });
+        expect(container.querySelector('.pw-survey-status')?.textContent).toBe('Terima kasih atas penilaian Anda (4/5).');
+        expect([...container.querySelectorAll<HTMLButtonElement>('.pw-survey-option')].every((button) => button.disabled)).toBe(true);
+
+        (container.querySelector('#pw-survey-comment-input') as HTMLTextAreaElement).value = 'Cepat dan ramah';
+        (container.querySelector('.pw-survey-comment') as HTMLFormElement).dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+        const csatCalls = sent.filter((entry) => entry.url.endsWith('/csat'));
+        expect(csatCalls[csatCalls.length - 1]?.body).toEqual({ comment: 'Cepat dan ramah' });
+        expect(container.querySelector('.pw-survey-comment-sent')?.textContent).toBe('“Cepat dan ramah”');
+    });
+
+
+    it('percakapan dibuka lagi lewat socket conversation.state → pemberitahuan "selesai" hilang; csat.updated memperbarui kartu', async () => {
+        history = {
+            conversation: { id: 'cv_1', status: 'resolved', resolved_at: '2026-10-15T02:00:00.000Z' },
+            survey: null,
+            messages: [{ id: 'wco_s', client_message_id: null, direction: 'outbound', sender: { kind: 'system', name: null }, type: 'text', text: 'Nilai kami', status: 'sent', timestamp: '2026-10-15T02:05:00.000Z', survey: { kind: 'rating', scale: 3 } }],
+        };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        socket.serverEmit('conversation.state', { conversation_id: 'cv_1', status: 'open', resolved_at: null });
+        expect((container.querySelector('.pw-notice') as HTMLDivElement).hidden).toBe(true);
+        socket.serverEmit('csat.updated', { conversation_id: 'cv_1', survey: { status: 'expired', scale: 3, score: null, satisfied: null, comment: null, comment_allowed: false, sent_at: null, expires_at: null, answered_at: null } });
+        const faces = [...container.querySelectorAll<HTMLButtonElement>('.pw-survey-option')];
+        expect(faces.map((button) => button.textContent)).toEqual(['😞', '😐', '😊']);
+        expect(faces.every((button) => button.disabled)).toBe(true);
+        expect(container.querySelector('.pw-survey-status')?.textContent).toBe('Masa penilaian sudah berakhir.');
+    });
+
+
+    it('transkrip: tombol hanya bila ada percakapan; email wajib bila belum diketahui → POST /transcript', async () => {
+        const first = await startApp();
+        first.app.command({ name: 'open', args: [] });
+        expect((first.container.querySelector('.pw-icon-btn[title="Kirim transkrip ke email"]') as HTMLButtonElement).hidden).toBe(true);
+
+        document.body.replaceChildren();
+        history = { conversation: { id: 'cv_1', status: 'open', resolved_at: null }, survey: null, messages: [] };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const button = container.querySelector('.pw-icon-btn[title="Kirim transkrip ke email"]') as HTMLButtonElement;
+        expect(button.hidden).toBe(false);
+        button.click();
+        const panel = container.querySelector('.pw-transcript') as HTMLFormElement;
+        expect(panel.hidden).toBe(false);
+        (container.querySelector('#pw-transcript-email') as HTMLInputElement).value = 'bukan-email';
+        panel.dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+        expect(sent.some((entry) => entry.url.endsWith('/transcript'))).toBe(false);
+        (container.querySelector('#pw-transcript-email') as HTMLInputElement).value = 'Pembeli@Example.com';
+        panel.dispatchEvent(new Event('submit', { cancelable: true }));
+        await settle();
+        expect(sent.find((entry) => entry.url.endsWith('/transcript'))?.body).toEqual({ email: 'pembeli@example.com' });
+        expect(panel.textContent).toContain('Transkrip dikirim. Periksa email Anda.');
     });
 
 

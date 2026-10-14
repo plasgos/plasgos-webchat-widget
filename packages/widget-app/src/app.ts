@@ -211,6 +211,21 @@ export class WidgetApp {
             submitOffline: (values) => {
                 void this.submitOffline(values);
             },
+            rate: (score) => {
+                void this.submitSurvey({ score });
+            },
+            surveyComment: (text) => {
+                void this.submitSurvey({ comment: text });
+            },
+            openTranscript: () => {
+                this.store.update({ transcript: { busy: false, sent: false, error: null } });
+            },
+            closeTranscript: () => {
+                this.store.update({ transcript: null });
+            },
+            sendTranscript: (email) => {
+                void this.sendTranscript(email);
+            },
         });
         this.view.mount(env.container);
         this.store.subscribe((state) => {
@@ -628,6 +643,12 @@ export class WidgetApp {
             case 'team.presence':
                 this.store.update({ teamOnline: (payload as Payload<'team.presence'>).online });
                 break;
+            case 'conversation.state':
+                this.store.update({ conversationStatus: (payload as Payload<'conversation.state'>).status });
+                break;
+            case 'csat.updated':
+                this.store.update({ survey: (payload as Payload<'csat.updated'>).survey, surveyError: null });
+                break;
         }
     }
 
@@ -661,7 +682,50 @@ export class WidgetApp {
         this.store.update((state) => ({
             messages: upsertMessages(state.messages, history.messages),
             conversationId: history.conversation?.id ?? state.conversationId,
+            conversationStatus: history.conversation?.status ?? 'open',
+            survey: history.survey === undefined ? state.survey : history.survey,
         }));
+    }
+
+
+    /* ── penilaian & transkrip (W5c) ── */
+
+    /** Skor (tombol kartu) atau komentar → `POST /csat`; keadaan kartu diganti jawaban server. */
+    private async submitSurvey(body: { score?: number; comment?: string }): Promise<void> {
+        if (this.store.get().surveyBusy) {
+            return;
+        }
+        this.store.update({ surveyBusy: true, surveyError: null });
+        try {
+            const result = await this.session.withToken((token) => this.api.submitCsat(token, body));
+            this.store.update({ survey: result.survey, surveyBusy: false });
+        } catch (error) {
+            this.store.update({ surveyBusy: false, surveyError: error instanceof ApiError ? error.code : 'unknown' });
+            if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
+                this.fatal(error.code);
+            }
+        }
+    }
+
+
+    private async sendTranscript(email: string | null): Promise<void> {
+        const panel = this.store.get().transcript;
+        if (!panel || panel.busy) {
+            return;
+        }
+        this.store.update({ transcript: { ...panel, busy: true, error: null } });
+        try {
+            await this.session.withToken((token) => this.api.requestTranscript(token, email ? { email } : {}));
+            this.store.update({ transcript: { busy: false, sent: true, error: null }, emailOnFile: true });
+        } catch (error) {
+            const code = error instanceof ApiError ? error.code : 'unknown';
+            this.store.update((state) => (state.transcript
+                ? { transcript: { ...state.transcript, busy: false, error: code } }
+                : {}));
+            if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
+                this.fatal(error.code);
+            }
+        }
     }
 
 
@@ -823,7 +887,10 @@ export class WidgetApp {
         } else if (message.type === 'shutdown') {
             this.realtime.disconnect();
             this.session.clear();
-            this.store.update({ messages: [], unread: 0, conversationId: null, trustLevel: null, emailOnFile: false });
+            this.store.update({
+                messages: [], unread: 0, conversationId: null, trustLevel: null, emailOnFile: false,
+                conversationStatus: 'open', survey: null, transcript: null,
+            });
         }
     }
 
@@ -986,7 +1053,7 @@ export class WidgetApp {
         await this.session.shutdown();
         this.store.update({
             messages: [], unread: 0, conversationId: null, trustLevel: null, open: false, prechatPending: false,
-            emailOnFile: false,
+            emailOnFile: false, conversationStatus: 'open', survey: null, transcript: null,
         });
     }
 

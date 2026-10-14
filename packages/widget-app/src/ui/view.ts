@@ -9,8 +9,10 @@ import { OfflineForm } from './offline';
 import type { OfflineValues } from './offline';
 import { OtpPanel } from './otp';
 import { PrechatForm } from './prechat';
+import { surveyCard, surveyQuestionOf } from './survey';
 import type { PrechatValues } from './prechat';
 import { STYLES } from './styles';
+import { TranscriptPanel } from './transcript';
 
 export interface ViewActions {
     readonly toggle: () => void;
@@ -27,6 +29,11 @@ export interface ViewActions {
     readonly verifyOtp: (code: string) => void;
     readonly otpChangeEmail: () => void;
     readonly submitOffline: (values: OfflineValues) => void;
+    readonly rate: (score: number) => void;
+    readonly surveyComment: (text: string) => void;
+    readonly openTranscript: () => void;
+    readonly closeTranscript: () => void;
+    readonly sendTranscript: (email: string | null) => void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -36,6 +43,7 @@ const ICONS = {
     send: 'M4 12l16-8-6 16-2-6-8-2z',
     soundOn: 'M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6',
     soundOff: 'M4 9h4l5-4v14l-5-4H4zM16 9l5 6M21 9l-5 6',
+    mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
 } as const;
 
 const STATUS_KEY: Readonly<Record<string, MessageKey>> = {
@@ -135,6 +143,10 @@ export class ChatView {
 
     private readonly offline: OfflineForm;
 
+    private readonly transcript: TranscriptPanel;
+
+    private readonly transcriptButton: HTMLButtonElement;
+
     private readonly input: HTMLTextAreaElement;
 
     private readonly sendButton: HTMLButtonElement;
@@ -167,9 +179,10 @@ export class ChatView {
         this.teamStatus = this.element('p', 'pw-team-status');
         this.teamStatus.setAttribute('aria-live', 'polite');
         headText.append(this.title, this.teamStatus, this.greeting);
+        this.transcriptButton = this.iconButton(ICONS.mail);
         this.soundButton = this.iconButton(ICONS.soundOn);
         this.closeButton = this.iconButton(ICONS.close);
-        header.append(this.logo, headText, this.soundButton, this.closeButton);
+        header.append(this.logo, headText, this.transcriptButton, this.soundButton, this.closeButton);
         this.window.setAttribute('aria-labelledby', 'pw-title');
 
         this.notice = this.element('div', 'pw-notice');
@@ -186,6 +199,7 @@ export class ChatView {
             changeEmail: actions.otpChangeEmail,
         });
         this.offline = new OfflineForm(doc, { submit: actions.submitOffline });
+        this.transcript = new TranscriptPanel(doc, { send: actions.sendTranscript, close: actions.closeTranscript });
         this.otpEntry = this.element('button', 'pw-otp-entry');
         this.otpEntry.type = 'button';
         this.otpEntry.addEventListener('click', () => {
@@ -205,7 +219,7 @@ export class ChatView {
         composer.append(label, this.input, this.sendButton);
         this.window.append(
             header, this.notice, this.otpEntry, this.list, this.typingLine, this.captcha, this.prechat.element,
-            this.otp.element, this.offline.element, composer,
+            this.otp.element, this.offline.element, this.transcript.element, composer,
         );
         this.root.append(this.launcher, this.window);
 
@@ -274,6 +288,17 @@ export class ChatView {
             this.logo.src = look.logo_url;
         }
         this.closeButton.setAttribute('aria-label', t('closeChat'));
+        // Transkrip hanya bila sudah ada percakapan (W5c).
+        this.transcriptButton.hidden = state.conversationId === null;
+        this.transcriptButton.setAttribute('aria-label', t('transcriptOpen'));
+        this.transcriptButton.title = t('transcriptOpen');
+        this.transcript.render(state.transcript ? {
+            emailOnFile: state.emailOnFile,
+            busy: state.transcript.busy,
+            sent: state.transcript.sent,
+            error: state.transcript.error ? errorText(state.locale, state.transcript.error) : null,
+            t,
+        } : null);
         this.soundButton.setAttribute('aria-label', state.soundEnabled ? t('soundOff') : t('soundOn'));
         this.soundButton.replaceChildren(this.icon(state.soundEnabled ? ICONS.soundOn : ICONS.soundOff, 20));
 
@@ -337,6 +362,15 @@ export class ChatView {
             return;
         }
 
+        // Tim menandai urusan selesai (W5c) — pengunjung tetap bisa menulis (membuka lagi).
+        if (state.conversationStatus === 'resolved' && state.connection === 'online') {
+            this.notice.hidden = false;
+            this.notice.dataset['tone'] = 'info';
+            this.notice.setAttribute('role', 'status');
+            this.notice.textContent = translate(state.locale, 'conversationResolved');
+            return;
+        }
+
         // Tim offline tetapi alamat balasan sudah diketahui: pengunjung menulis biasa, balasan juga lewat email.
         if (availabilityOf(state) !== 'open' && state.emailOnFile && state.config?.offline?.mode !== 'hidden'
             && state.config?.availability && state.connection === 'online') {
@@ -361,25 +395,39 @@ export class ChatView {
 
 
     private renderMessages(state: AppState, t: (key: MessageKey) => string): void {
-        const signature = state.messages.map((message) => `${messageKey(message)}|${message.status ?? ''}|${message.id ?? ''}`).join(',');
+        const survey = state.survey;
+        const surveyKey = survey ? [survey.status, survey.score, survey.comment, survey.comment_allowed].join(':') : '';
+        const signature = `${state.locale}|${surveyKey}|${String(state.surveyBusy)}|${state.surveyError ?? ''}|`
+            + state.messages.map((message) => `${messageKey(message)}|${message.status ?? ''}|${message.id ?? ''}`).join(',');
         if (signature === this.renderedKeys) {
             return;
         }
         this.renderedKeys = signature;
         const atBottom = this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < STICK_TO_BOTTOM_PX;
-        this.list.replaceChildren(...state.messages.map((message) => this.messageItem(message, state, t)));
+        // Kartu penilaian hanya di pesan survei TERAKHIR (keadaan survei yang diketahui adalah survei terakhir).
+        const lastRating = state.messages.map((message) => message.survey?.kind).lastIndexOf('rating');
+        this.list.replaceChildren(...state.messages.map((message, index) => this.messageItem(
+            message, state, t, index === lastRating,
+        )));
         if (atBottom) {
             this.list.scrollTop = this.list.scrollHeight;
         }
     }
 
 
-    private messageItem(message: ChatMessage, state: AppState, t: (key: MessageKey) => string): HTMLLIElement {
+    private messageItem(
+        message: ChatMessage,
+        state: AppState,
+        t: (key: MessageKey) => string,
+        ratingCard: boolean,
+    ): HTMLLIElement {
         const visitor = message.direction === 'inbound';
         const item = this.element('li', 'pw-msg');
         item.dataset['side'] = visitor ? 'visitor' : 'team';
         const bubble = this.element('div', 'pw-bubble');
-        bubble.appendChild(renderMarkdown(this.doc, message.text ?? ''));
+        // Pesan survei dengan kartu penilaian: daftar pilihan bernomor diganti tombol.
+        const text = ratingCard ? surveyQuestionOf(message.text) : message.text ?? '';
+        bubble.appendChild(renderMarkdown(this.doc, text));
         const meta = this.element('div', 'pw-meta');
         const time = new Date(message.timestamp);
         const clock = Number.isNaN(time.getTime())
@@ -402,6 +450,15 @@ export class ChatView {
             }
         }
         item.append(bubble, meta);
+        if (ratingCard && message.survey?.kind === 'rating') {
+            item.appendChild(surveyCard(this.doc, {
+                scale: message.survey.scale,
+                survey: state.survey,
+                busy: state.surveyBusy,
+                error: state.surveyError ? errorText(state.locale, state.surveyError) : null,
+                t: (key, vars) => translate(state.locale, key, vars),
+            }, { rate: this.actions.rate, comment: this.actions.surveyComment }));
+        }
         return item;
     }
 
@@ -426,6 +483,9 @@ export class ChatView {
         });
         this.closeButton.addEventListener('click', () => {
             this.actions.close();
+        });
+        this.transcriptButton.addEventListener('click', () => {
+            this.actions.openTranscript();
         });
         this.soundButton.addEventListener('click', () => {
             this.actions.interact();

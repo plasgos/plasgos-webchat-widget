@@ -1,6 +1,6 @@
 import type {
-    ConversationPage, OfflineMessageResult, OtpRequestResult, PageInfo, PrechatResult, SendResult, Session,
-    WidgetConfig,
+    ConversationPage, CustomerSurvey, OfflineMessageResult, OtpRequestResult, PageInfo, PrechatResult, SendResult,
+    Session, TranscriptResult, WidgetConfig,
 } from './types';
 
 /**
@@ -120,6 +120,18 @@ export class PublicApi {
     /** Pesan saat tim offline (W5b): masuk percakapan seperti pesan biasa + konfirmasi ke email pengunjung. */
     public offlineMessage(token: string, body: OfflineMessageBody): Promise<OfflineMessageResult> {
         return this.request('POST', '/offline-messages', { token, body });
+    }
+
+
+    /** Penilaian dari kartu survei (W5c): skor (sekali), komentar (sekali, ≤24 jam setelah skor), atau keduanya. */
+    public submitCsat(token: string, body: { score?: number; comment?: string }): Promise<{ survey: CustomerSurvey }> {
+        return this.request('POST', '/csat', { token, body });
+    }
+
+
+    /** Transkrip percakapan ke email (W5c); `email` wajib bila alamat belum diketahui. */
+    public requestTranscript(token: string, body: { email?: string }): Promise<TranscriptResult> {
+        return this.request('POST', '/transcript', { token, body });
     }
 
 

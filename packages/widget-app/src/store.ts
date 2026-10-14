@@ -1,4 +1,4 @@
-import type { AvailabilityStatus, ChatMessage, Locale, WidgetConfig } from './types';
+import type { AvailabilityStatus, ChatMessage, ConversationStatus, CustomerSurvey, Locale, WidgetConfig } from './types';
 
 /** Urutan status pesan; status TAK PERNAH mundur (read tak diturunkan delivered yang datang terlambat). */
 const STATUS_RANK: Readonly<Record<string, number>> = {
@@ -53,6 +53,21 @@ export interface AppState {
     readonly offlineBusy: boolean;
     /** Kode galat kiriman formulir offline terakhir, atau null. */
     readonly offlineError: string | null;
+    /** Tim menandai percakapan selesai (W5c) — pengunjung tetap bisa menulis (membuka lagi). */
+    readonly conversationStatus: ConversationStatus;
+    /** Survei kepuasan terakhir (kartu penilaian), atau null. */
+    readonly survey: CustomerSurvey | null;
+    readonly surveyBusy: boolean;
+    /** Kode galat kiriman penilaian terakhir, atau null. */
+    readonly surveyError: string | null;
+    /** Panel transkrip: null = tertutup. */
+    readonly transcript: TranscriptState | null;
+}
+
+export interface TranscriptState {
+    readonly busy: boolean;
+    readonly sent: boolean;
+    readonly error: string | null;
 }
 
 export interface OtpState {
@@ -88,6 +103,11 @@ export const INITIAL_STATE: AppState = {
     emailOnFile: false,
     offlineBusy: false,
     offlineError: null,
+    conversationStatus: 'open',
+    survey: null,
+    surveyBusy: false,
+    surveyError: null,
+    transcript: null,
 };
 
 /**

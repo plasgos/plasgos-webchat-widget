@@ -111,6 +111,38 @@ export interface PrechatResult {
 
 export type MessageStatus = 'pending' | 'failed' | 'accepted' | 'sent' | 'delivered' | 'read' | 'unread';
 
+/**
+ * Penanda pesan survei kepuasan (W5c): `rating` = pesan survei (widget menampilkan tombol skor), `comment_prompt` =
+ * permintaan komentar setelah skor rendah, `thanks` = ucapan terima kasih. Pesan lain `null`.
+ */
+export type SurveyMarker =
+    | { readonly kind: 'rating'; readonly scale: 3 | 5 }
+    | { readonly kind: 'comment_prompt' }
+    | { readonly kind: 'thanks' };
+
+/** Survei terakhir percakapan (bentuk `survey` di `GET /conversation` & socket `csat.updated`). */
+export interface CustomerSurvey {
+    readonly status: 'sent' | 'answered' | 'expired';
+    readonly scale: number;
+    readonly score: number | null;
+    readonly satisfied: boolean | null;
+    readonly comment: string | null;
+    readonly comment_allowed: boolean;
+    readonly sent_at: string | null;
+    readonly expires_at: string | null;
+    readonly answered_at: string | null;
+}
+
+/** `open` | `resolved` — tim menandai urusan pengunjung selesai (W5c). */
+export type ConversationStatus = 'open' | 'resolved';
+
+export interface ConversationRef {
+    readonly id: string;
+    /** Server lama tak mengirimnya → dianggap `open`. */
+    readonly status?: ConversationStatus;
+    readonly resolved_at?: string | null;
+}
+
 export interface ChatMessage {
     readonly id: string | null;
     readonly client_message_id: string | null;
@@ -121,6 +153,8 @@ export interface ChatMessage {
     /** Nilai `MessageStatus`; server bisa menambah status baru — disimpan apa adanya. */
     readonly status: string | null;
     readonly timestamp: string;
+    /** W5c; server lama tak mengirimnya. */
+    readonly survey?: SurveyMarker | null;
 }
 
 export interface SendResult {
@@ -136,8 +170,15 @@ export interface OfflineMessageResult extends SendResult {
 }
 
 export interface ConversationPage {
-    readonly conversation: { readonly id: string } | null;
+    readonly conversation: ConversationRef | null;
+    /** W5c; server lama tak mengirimnya. */
+    readonly survey?: CustomerSurvey | null;
     readonly messages: readonly ChatMessage[];
+}
+
+export interface TranscriptResult {
+    readonly sent: boolean;
+    readonly email_on_file: boolean;
 }
 
 export interface PageInfo {

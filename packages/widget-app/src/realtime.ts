@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 
-import type { ChatMessage } from './types';
+import type { ChatMessage, ConversationStatus, CustomerSurvey } from './types';
 
 /** Event server → widget di namespace `/webchat` (api-crm WEBCHAT_DESIGN.md §8). */
 export interface ServerEvents {
@@ -19,6 +19,10 @@ export interface ServerEvents {
     'session.revoked': (payload: { reason: string }) => void;
     /** Ada agen siap melayani (W5a); `online: null` = tak diketahui. */
     'team.presence': (payload: { online: boolean | null; at: string }) => void;
+    /** Tim menandai percakapan selesai / pengunjung atau agen membukanya lagi (W5c). */
+    'conversation.state': (payload: { conversation_id: string; status: ConversationStatus; resolved_at: string | null }) => void;
+    /** Survei kepuasan dikirim / dijawab (semua tab pengunjung, W5c). */
+    'csat.updated': (payload: { conversation_id: string; survey: CustomerSurvey | null }) => void;
 }
 
 /** Event widget → server; balasan lewat ack. */
@@ -95,7 +99,10 @@ export class Realtime {
                 this.handlers.onTokenStale();
             }
         });
-        const events = ['message.created', 'message.status', 'typing', 'session.refresh_required', 'session.revoked', 'team.presence'] as const;
+        const events = [
+            'message.created', 'message.status', 'typing', 'session.refresh_required', 'session.revoked', 'team.presence',
+            'conversation.state', 'csat.updated',
+        ] as const;
         for (const name of events) {
             socket.on(name, ((payload: never) => {
                 this.handlers.onEvent(name, payload);
