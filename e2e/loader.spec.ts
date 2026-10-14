@@ -107,13 +107,29 @@ test('navigasi SPA (pushState) dilaporkan ke widget beserta judul halaman baru',
     expect(page_?.payload.args?.[0]).toMatchObject({ url: expect.stringContaining('/produk'), title: 'Toko Uji — produk' });
 });
 
-test('framework mengganti isi <body> → root dipasang ulang dan handshake diulang', async ({ page }) => {
+test('framework mengganti <body> utuh (Turbo/View Transitions) → iframe yang sama tetap hidup, tanpa handshake ulang', async ({ page }) => {
     await page.goto(SNIPPET);
-    await widgetFrame(page);
-    await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
+    const before = await widgetFrame(page);
+    await expect.poll(async () => (await received(before)).map((message) => message.type)).toContain('host.init');
 
     await page.evaluate(() => {
-        document.body.replaceChildren(Object.assign(document.createElement('main'), { textContent: 'Halaman baru (Turbo)' }));
+        const body = document.createElement('body');
+        body.append(Object.assign(document.createElement('main'), { textContent: 'Halaman baru (Turbo)' }));
+        document.body.replaceWith(body);
+    });
+
+    await expect(page.locator('main')).toHaveText('Halaman baru (Turbo)');
+    await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
+    expect(before.isDetached()).toBe(false);
+    expect((await received(before)).filter((message) => message.type === 'host.init')).toHaveLength(1);
+});
+
+test('root dicabut skrip lain → dipasang ulang dan handshake diulang', async ({ page }) => {
+    await page.goto(SNIPPET);
+    await widgetFrame(page);
+
+    await page.evaluate(() => {
+        document.getElementById('plasgos-webchat-root')?.remove();
     });
 
     await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);

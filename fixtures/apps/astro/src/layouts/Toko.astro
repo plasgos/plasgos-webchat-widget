@@ -1,0 +1,31 @@
+---
+import { ClientRouter } from 'astro:transitions';
+
+interface Props {
+    readonly title: string;
+}
+
+const { title } = Astro.props;
+---
+<html lang="id">
+    <head>
+        <meta charset="utf-8" />
+        <title>{title}</title>
+        <ClientRouter />
+    </head>
+    <body>
+        <slot />
+        <script>
+            // Skrip modul Astro dijalankan sekali per dokumen (tidak diulang tiap View Transition); navigasi
+            // ClientRouter (pushState) tertangkap deteksi otomatis loader.
+            import { loadWebchat } from '@plasgos/webchat';
+
+            void loadWebchat({
+                widgetId: 'wgt_0123456789abcdef01234567',
+                loaderUrl: 'http://localhost:4400/packages/loader/dist/loader.js',
+                widgetOrigin: 'http://127.0.0.1:4400',
+                load: 'eager',
+            });
+        </script>
+    </body>
+</html>

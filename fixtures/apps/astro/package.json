@@ -1,0 +1,16 @@
+{
+  "name": "fixture-astro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "start": "astro preview --port 4517 --ignore-lock"
+  },
+  "dependencies": {
+    "@plasgos/webchat": "file:../.packs/webchat.tgz",
+    "astro": "7.3.8"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

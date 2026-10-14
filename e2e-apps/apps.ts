@@ -60,6 +60,12 @@ export const APPS: readonly FixtureApp[] = [
         start: 'pnpm --dir fixtures/apps/sveltekit start',
         entries: [{ label: 'SvelteKit 3 (page dari $app/state)', path: '/', link: '#ke-produk', target: '/produk' }],
     },
+    {
+        name: 'astro',
+        port: 4517,
+        start: 'pnpm --dir fixtures/apps/astro start',
+        entries: [{ label: 'View Transitions (ClientRouter)', path: '/', link: '#ke-produk', target: '/produk' }],
+    },
 ];
 
 /** `APPS=next15,nuxt3` membatasi aplikasi yang diuji (yang belum dibangun dilewati). */

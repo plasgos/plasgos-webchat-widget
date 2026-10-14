@@ -46,6 +46,7 @@ describe('controller loader', () => {
         vi.advanceTimersByTime(1000);
         vi.useRealTimers();
         document.body.replaceChildren();
+        document.getElementById(ROOT_ID)?.remove();
     });
 
 
@@ -210,14 +211,29 @@ describe('controller loader', () => {
     });
 
 
-    it('root yang dicabut framework (isi body diganti) dipasang ulang', async () => {
+    it('root di luar <body>: body diganti utuh (View Transitions/Turbo) → root & iframe yang sama tetap terpasang', async () => {
+        const webchat = controller();
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager' }]);
+        vi.advanceTimersByTime(10);
+        const root = document.getElementById(ROOT_ID);
+
+        document.body.replaceWith(document.createElement('body'));
+        await Promise.resolve();
+
+        expect(root?.parentElement).toBe(document.documentElement);
+        expect(document.getElementById(ROOT_ID)).toBe(root);
+        expect(iframes()).toHaveLength(1);
+    });
+
+
+    it('root yang tetap dicabut skrip lain dipasang ulang', async () => {
         const webchat = controller();
         webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager' }]);
         vi.advanceTimersByTime(10);
 
-        document.body.replaceChildren();
+        document.getElementById(ROOT_ID)?.remove();
         await Promise.resolve();
 
-        expect(document.getElementById(ROOT_ID)).not.toBeNull();
+        expect(document.getElementById(ROOT_ID)?.parentElement).toBe(document.documentElement);
     });
 });

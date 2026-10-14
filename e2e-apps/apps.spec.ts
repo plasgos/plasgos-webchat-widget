@@ -37,13 +37,14 @@ function watchProblems(page: Page): string[] {
 
 for (const app of selectedApps()) {
     for (const entry of app.entries) {
-        test(`${app.name} ${entry.label}: SSR tanpa galat, satu widget, navigasi klien dilaporkan sekali`, async ({ page }) => {
+        test(`${app.name} ${entry.label}: SSR tanpa galat, satu widget, navigasi klien dilaporkan sekali, iframe tak dimuat ulang`, async ({ page }) => {
             const problems = watchProblems(page);
             const base = `http://localhost:${String(app.port)}`;
             await page.goto(`${base}${entry.path}`);
 
             await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
             await expect.poll(async () => (await received(page)).map((message) => message.type)).toContain('host.init');
+            const frameBefore = widgetFrame(page);
 
             await page.click(entry.link);
             await expect(page).toHaveURL(`${base}${entry.target}`);
@@ -54,6 +55,10 @@ for (const app of selectedApps()) {
             expect(pages).toHaveLength(1);
             expect(pages[0]?.payload.args?.[0]?.url).toBe(`${base}${entry.target}`);
             await expect(page.locator(`${ROOT} iframe`)).toHaveCount(1);
+            // Iframe yang sama (tak dipasang ulang): percakapan yang sedang terbuka tetap utuh lintas navigasi.
+            expect(frameBefore?.isDetached()).toBe(false);
+            expect(widgetFrame(page)).toBe(frameBefore);
+            expect((await received(page)).filter((message) => message.type === 'host.init')).toHaveLength(1);
             expect(problems).toEqual([]);
         });
     }

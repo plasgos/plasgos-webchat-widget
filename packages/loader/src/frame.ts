@@ -22,15 +22,6 @@ export interface FrameHostConfig {
 
 type StyleTarget = { readonly style: CSSStyleDeclaration };
 
-/**
- * `document.body` masih null bila loader berjalan di `<head>` sebelum body diurai — tipe lib DOM tak
- * mencerminkannya, jadi dibaca lewat `Reflect.get` dengan tipe yang jujur.
- */
-function bodyOf(doc: Document): HTMLElement | null {
-    const body: unknown = Reflect.get(doc, 'body');
-    return body instanceof HTMLElement ? body : null;
-}
-
 function setStyles(element: StyleTarget, styles: Readonly<Record<string, string>>): void {
     for (const [name, value] of Object.entries(styles)) {
         element.style.setProperty(name, value);
@@ -38,7 +29,10 @@ function setStyles(element: StyleTarget, styles: Readonly<Record<string, string>
 }
 
 /**
- * Root `<div id="plasgos-webchat-root">` + iframe widget di akhir `<body>`. Semua gaya lewat CSSOM (tanpa
+ * Root `<div id="plasgos-webchat-root">` + iframe widget sebagai anak terakhir `<html>` — DI LUAR `<body>`: navigasi
+ * yang mengganti `<body>` utuh (Astro View Transitions, Turbo/Hotwire, htmx boost) tak menyentuhnya, jadi iframe
+ * tak dimuat ulang dan percakapan yang terbuka tetap utuh (pola yang sama dipakai Astro untuk elemen persist).
+ * Framework yang menghidrasi `<body>` (React/Vue/Svelte) juga tak pernah melihat root. Semua gaya lewat CSSOM (tanpa
  * `<style>`, tanpa `innerHTML`) supaya lolos CSP `style-src` tanpa `'unsafe-inline'` dan Trusted Types.
  * Posisi `fixed` dengan ukuran tetap per keadaan → tanpa layout shift halaman tenant.
  */
@@ -52,10 +46,6 @@ export class FrameHost {
     private scrollLock: ScrollLock | null = null;
 
     private layout: FrameLayout | null = null;
-
-    private bodyObserver: MutationObserver | null = null;
-
-    private bodyCallback: (() => void) | null = null;
 
     private readonly onViewport = (): void => {
         this.fitViewport();
@@ -190,46 +180,25 @@ export class FrameHost {
 
 
     private mount(): void {
-        const doc = this.config.document;
-        (bodyOf(doc) ?? doc.documentElement).appendChild(this.root);
+        this.config.document.documentElement.appendChild(this.root);
     }
 
 
     /**
-     * Framework yang mengganti isi/elemen `<body>` saat navigasi (Turbo/Hotwire, beberapa SSG) mencabut root →
-     * dipasang ulang. Pengamat ringan: hanya anak langsung `<html>` dan `<body>`, bukan seluruh pohon.
+     * Skrip/framework yang tetap mencabut root (mis. mengganti seluruh anak `<html>`) → dipasang ulang & handshake
+     * diulang. Pengamat ringan: hanya anak langsung `<html>`, bukan seluruh pohon.
      */
     private watchRemoval(): void {
-        const doc = this.config.document;
         const restore = (): void => {
             if (this.root.isConnected) {
                 return;
             }
 
             this.mount();
-            this.observeBody();
             this.config.onReattached();
         };
-        const htmlObserver = new MutationObserver(restore);
-        htmlObserver.observe(doc.documentElement, { childList: true });
-        this.observers.push(htmlObserver);
-        this.observeBody(restore);
-    }
-
-
-    private observeBody(callback?: () => void): void {
-        if (callback) {
-            this.bodyCallback = callback;
-        }
-        const body = bodyOf(this.config.document);
-        if (!body || !this.bodyCallback) {
-            return;
-        }
-
-        this.bodyObserver?.disconnect();
-        const observer = new MutationObserver(this.bodyCallback);
-        observer.observe(body, { childList: true });
-        this.bodyObserver = observer;
+        const observer = new MutationObserver(restore);
+        observer.observe(this.config.document.documentElement, { childList: true });
         this.observers.push(observer);
     }
 

@@ -23,3 +23,4 @@ fixtures/apps/*/next-env.d.ts
 fixtures/apps/.packs/
 fixtures/apps/*/pnpm-lock.yaml
 fixtures/apps/*/dist/
+fixtures/apps/*/.astro/
