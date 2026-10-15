@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FrameLayout } from '@plasgos/webchat-protocol';
 
 import type { HostPort } from '../src/app';
+import { STYLES } from '../src/ui/styles';
 
 function last<T>(list: readonly T[]): T | undefined {
     return list[list.length - 1];
@@ -749,6 +750,15 @@ describe('aplikasi widget (iframe)', () => {
         expect(socket.emitted.some((event) => event.name === 'read')).toBe(true);
         expect(container.querySelector('.pw-badge')?.hasAttribute('hidden')).toBe(true);
         expect(container.querySelector('.pw-msg[data-side="team"] strong')?.textContent).toBe('Masih');
+    });
+
+
+    it('elemen ber-`hidden` selalu tersembunyi: satu aturan global menang atas `display` per kelas', () => {
+        // jsdom tak menghitung cascade gaya penulis — perilaku sungguhan dijaga e2e-live (lencana "0" dulu
+        // tampil karena `.pw-badge{display:grid}` menimpa `hidden`). Di sini: aturan global ada, tak ada lagi
+        // `[hidden]` per kelas.
+        expect(STYLES).toContain('[hidden]{display:none!important}');
+        expect(STYLES.match(/\.[\w-]+\[hidden\]/g)).toBeNull();
     });
 
 

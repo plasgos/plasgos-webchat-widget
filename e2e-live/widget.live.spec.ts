@@ -114,6 +114,8 @@ function widget(page: Page): FrameLocator {
 async function openStore(page: Page): Promise<FrameLocator> {
     await page.goto(`/fixtures/live-api-crm/?widget=${widgetId}&origin=${encodeURIComponent(WIDGET_ORIGIN)}`);
     const frame = widget(page);
+    // Tanpa pesan belum dibaca lencana TIDAK tampil (dulu "0" karena `.pw-badge{display:grid}` menimpa `hidden`).
+    await expect(frame.locator('.pw-badge')).toBeHidden();
     await frame.getByRole('button', { name: /Buka chat/ }).click();
     await expect(frame.getByRole('dialog')).toBeVisible();
     return frame;

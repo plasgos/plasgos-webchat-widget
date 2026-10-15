@@ -2,12 +2,17 @@
  * Gaya aplikasi widget. Dokumen iframe api-crm mengizinkan `style-src … 'unsafe-inline'` (gaya hanya memengaruhi
  * iframe ini, tak pernah website tenant), jadi satu `<style>` disuntik sekali. Warna tenant lewat variabel CSS.
  */
+/**
+ * `[hidden]` selalu menang: elemen yang ditata `display:grid|flex` (mis. lencana belum dibaca) dulu tetap tampil walau
+ * `hidden` (lencana "0" di launcher) — satu aturan untuk semua elemen, bukan `[hidden]` per kelas.
+ */
 export const STYLES = `
 :root{--pw-primary:#f0592b;--pw-on-primary:#fff;--pw-bg:#fff;--pw-surface:#f7f5f3;--pw-text:#1f2024;--pw-muted:#6b6a72;
 --pw-border:#e9e4df;--pw-in:#f1efed;--pw-danger:#b42318;--pw-radius:16px;color-scheme:light}
 :root[data-theme="dark"]{--pw-bg:#1d1b19;--pw-surface:#26231f;--pw-text:#f3efea;--pw-muted:#b3aca4;--pw-border:#3a342e;
 --pw-in:#2f2a25;--pw-danger:#ff9b8f;color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;height:100%;background:transparent;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 color:var(--pw-text);-webkit-font-smoothing:antialiased}
 button,textarea{font:inherit;color:inherit}
@@ -24,7 +29,6 @@ background:var(--pw-danger);color:#fff;font-size:11px;font-weight:700;display:gr
 border-radius:var(--pw-radius);overflow:hidden;box-shadow:0 20px 60px -24px rgba(0,0,0,.45)}
 .pw-root[data-fullscreen="true"] .pw-window{border-radius:0;border:0;padding:env(safe-area-inset-top) env(safe-area-inset-right)
 env(safe-area-inset-bottom) env(safe-area-inset-left)}
-.pw-window[hidden],.pw-launcher[hidden],.pw-teaser[hidden]{display:none}
 .pw-teaser{position:absolute;bottom:80px;left:12px;right:12px;display:flex;align-items:flex-start;gap:4px;padding:12px 8px 12px 14px;
 background:var(--pw-bg);color:var(--pw-text);border:1px solid var(--pw-border);border-radius:16px;
 box-shadow:0 12px 32px -12px rgba(0,0,0,.4);animation:pw-teaser-in .2s ease-out}
@@ -68,7 +72,7 @@ border-radius:12px;background:var(--pw-bg);line-height:1.4}
 display:grid;place-items:center}
 .pw-send:disabled{opacity:.5;cursor:not-allowed}
 .pw-attach{width:40px;height:40px;border:0;border-radius:12px;background:transparent;color:var(--pw-muted,inherit);cursor:pointer;display:flex;align-items:center;justify-content:center}
-.pw-attach[hidden],.pw-file-input{display:none}
+.pw-file-input{display:none}
 .pw-attach:disabled{opacity:.5;cursor:not-allowed}
 .pw-attachment-image{display:block;margin:-4px -6px 6px}
 .pw-attachment-img{display:block;max-width:220px;max-height:220px;border-radius:10px;object-fit:cover}
@@ -84,7 +88,6 @@ display:grid;place-items:center}
 color:var(--pw-primary);font:inherit;font-weight:600;text-align:center;cursor:pointer;text-decoration:none;box-sizing:border-box}
 .pw-chip{padding:6px 12px;border:1px solid var(--pw-primary);border-radius:999px;background:var(--pw-surface);color:var(--pw-primary);font:inherit;cursor:pointer}
 .pw-list-panel{display:flex;flex-direction:column;border:1px solid var(--pw-border);border-radius:10px;overflow:hidden}
-.pw-list-panel[hidden]{display:none}
 .pw-list-section{padding:6px 10px;font-size:12px;font-weight:700;opacity:.7;background:var(--pw-bg)}
 .pw-list-row{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border:0;border-top:1px solid var(--pw-border);background:var(--pw-surface);color:inherit;font:inherit;text-align:left;cursor:pointer}
 .pw-list-description{font-size:12px;opacity:.7}
@@ -92,7 +95,6 @@ color:var(--pw-primary);font:inherit;font-weight:600;text-align:center;cursor:po
 .pw-location-address{font-size:13px;opacity:.8;margin-bottom:6px}
 .pw-prechat{padding:14px 16px;border-top:1px solid var(--pw-border);background:var(--pw-bg);display:flex;flex-direction:column;
 gap:10px;max-height:60%;overflow-y:auto}
-.pw-prechat[hidden]{display:none}
 .pw-prechat-title{margin:0;font-weight:600}
 .pw-prechat-fields{display:flex;flex-direction:column;gap:10px}
 .pw-field{display:flex;flex-direction:column;gap:4px}
@@ -112,16 +114,13 @@ color:inherit}
 .pw-prechat-skip{border:1px solid var(--pw-border);background:transparent;color:inherit}
 .pw-otp-entry{margin:0;padding:8px 14px;border:0;border-bottom:1px solid var(--pw-border);background:var(--pw-surface);
 color:var(--pw-primary);font:inherit;font-weight:600;text-align:left;cursor:pointer;text-decoration:underline}
-.pw-otp-entry[hidden],.pw-otp[hidden]{display:none}
 .pw-handoff{border-bottom:0;border-top:1px solid var(--pw-border)}
 .pw-handoff:disabled{opacity:.6;cursor:progress}
 .pw-whatsapp{display:block;text-decoration:none;color:inherit}
-.pw-whatsapp[hidden]{display:none}
 .pw-otp{padding:14px 16px;border-top:1px solid var(--pw-border);background:var(--pw-bg);display:flex;flex-direction:column;gap:8px}
 .pw-otp-title{margin:0;font-weight:600}
 .pw-otp-hint{margin:0;font-size:12.5px;color:var(--pw-muted)}
 .pw-team-status{margin:2px 0 0;font-size:12px;display:flex;align-items:center;gap:6px}
-.pw-team-status[hidden]{display:none}
 .pw-team-status::before{content:"";width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.55)}
 .pw-team-status[data-online="true"]::before{background:#22c55e;box-shadow:0 0 0 2px rgba(255,255,255,.6)}
 .pw-survey{margin-top:6px;padding:10px 12px;border:1px solid var(--pw-border);border-radius:12px;background:var(--pw-bg);
@@ -133,8 +132,6 @@ font-size:18px;line-height:1;color:var(--pw-muted)}
 .pw-survey-option:not(:disabled):hover{border-color:var(--pw-primary);color:var(--pw-primary)}
 .pw-survey-option:disabled{cursor:default}
 .pw-survey-status,.pw-survey-comment-sent{margin:0;font-size:12.5px;color:var(--pw-muted)}
-.pw-survey-status[hidden]{display:none}
 .pw-survey-comment{display:flex;flex-direction:column;gap:6px}
-.pw-transcript[hidden],.pw-field[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 `;
