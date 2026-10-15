@@ -167,6 +167,37 @@ export interface ChatMessage {
     readonly survey?: SurveyMarker | null;
     /** Lampiran (W7a). Tautan lampiran pengunjung bertanda tangan & kedaluwarsa (`expires_at`). */
     readonly attachment?: MessageAttachment | null;
+    /** Pilihan yang bisa diklik pada pesan tim (W7b). */
+    readonly actions?: MessageActions | null;
+    /** Pesan lokasi (W7b). */
+    readonly location?: MessageLocation | null;
+}
+
+export interface MessageActionItem {
+    readonly id: string;
+    readonly title: string;
+    readonly description: string | null;
+    readonly section: string | null;
+    /** Hanya untuk `link` — dibuka langsung, bukan dikirim. */
+    readonly url: string | null;
+}
+
+export interface MessageActions {
+    /** `quick_replies` | `buttons` | `list` | `link` — server bisa menambah jenis baru (tak dirender). */
+    readonly kind: string;
+    readonly header: string | null;
+    readonly footer: string | null;
+    readonly button_text: string | null;
+    readonly image_url: string | null;
+    readonly items: readonly MessageActionItem[];
+}
+
+export interface MessageLocation {
+    readonly latitude: number;
+    readonly longitude: number;
+    readonly name: string | null;
+    readonly address: string | null;
+    readonly url: string;
 }
 
 export interface MessageAttachment {

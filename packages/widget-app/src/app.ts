@@ -24,7 +24,7 @@ import { ChatView } from './ui/view';
 /** Galat lampiran — ditampilkan ke pengunjung, pesannya ditandai gagal (bisa dicoba lagi). */
 const ATTACHMENT_ERROR_CODES: readonly string[] = [
     'attachments_disabled', 'attachment_not_allowed', 'attachment_too_large', 'attachment_rejected',
-    'attachment_not_found', 'attachments_unavailable', 'upload_failed',
+    'attachment_not_found', 'attachments_unavailable', 'upload_failed', 'postback_invalid',
 ];
 
 const RETRY_STEPS_MS = [2000, 5000, 10000, 30000];
@@ -120,6 +120,9 @@ export class WidgetApp {
 
     private mediaRefreshedAt = 0;
 
+    /** Pilihan yang diklik & belum terkirim (W7b) — `client_message_id` → postback. */
+    private readonly postbacks = new Map<string, { message_id: string; id: string }>();
+
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     private retryAttempt = 0;
@@ -192,6 +195,9 @@ export class WidgetApp {
             },
             attach: (file) => {
                 this.attach(file);
+            },
+            choose: (messageId, item) => {
+                this.choose(messageId, item);
             },
             mediaExpired: () => {
                 // Tautan lampiran privat berumur 15 menit — gambar gagal dimuat = ambil ulang riwayat (≤ 1×/30 dtk).
@@ -580,6 +586,28 @@ export class WidgetApp {
     }
 
 
+    /**
+     * Klik pilihan pada pesan tim (W7b): tampil seketika sebagai pesan pengunjung berjudul pilihan, dikirim sebagai
+     * `postback` (server memverifikasinya terhadap pesan asal). Tautan tak lewat sini — dibuka langsung oleh tampilan.
+     */
+    private choose(messageId: string, item: { id: string; title: string }): void {
+        const clientMessageId = this.env.window.crypto.randomUUID();
+        this.postbacks.set(clientMessageId, { message_id: messageId, id: item.id });
+        const message: ChatMessage = {
+            id: null,
+            client_message_id: clientMessageId,
+            direction: 'inbound',
+            sender: { kind: 'customer', name: null },
+            type: 'text',
+            text: item.title,
+            status: 'pending',
+            timestamp: new Date().toISOString(),
+        };
+        this.store.update((state) => ({ messages: upsertMessages(state.messages, [message]) }));
+        void this.flushOutbox();
+    }
+
+
     /** Unggah berkas pesan ke penyimpanan (sekali per `attachment_id`) → id untuk `POST /messages`. */
     private async uploadedAttachmentId(clientMessageId: string): Promise<string | null> {
         const pending = this.uploads.get(clientMessageId);
@@ -637,13 +665,15 @@ export class WidgetApp {
         const clientMessageId = message.client_message_id ?? '';
         try {
             const attachmentId = await this.uploadedAttachmentId(clientMessageId);
+            const postback = this.postbacks.get(clientMessageId);
             const result = await this.session.withToken((token) => this.api.send(token, {
                 client_message_id: clientMessageId,
-                ...(message.text ? { text: message.text } : {}),
+                ...(postback ? { postback } : message.text ? { text: message.text } : {}),
                 ...(attachmentId ? { attachment_ids: [attachmentId] } : {}),
                 page: this.page,
             }));
             this.uploads.delete(clientMessageId);
+            this.postbacks.delete(clientMessageId);
             const accepted: ChatMessage = { ...message, id: result.message_id, status: 'accepted' };
             this.store.update((state) => ({
                 messages: upsertMessages(state.messages, [accepted]),

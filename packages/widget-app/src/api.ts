@@ -111,7 +111,13 @@ export class PublicApi {
 
     public send(
         token: string,
-        body: { client_message_id: string; text?: string; attachment_ids?: string[]; page?: PageInfo },
+        body: {
+            client_message_id: string;
+            text?: string;
+            attachment_ids?: string[];
+            postback?: { message_id: string; id: string };
+            page?: PageInfo;
+        },
     ): Promise<SendResult> {
         return this.request('POST', '/messages', { token, body });
     }

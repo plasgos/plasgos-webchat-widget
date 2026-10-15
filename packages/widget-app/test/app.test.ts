@@ -614,6 +614,41 @@ describe('aplikasi widget (iframe)', () => {
     });
 
 
+    it('pilihan: tombol & kartu di pesan tim → klik dikirim sebagai postback (judul tampil); balasan cepat hanya di pesan terakhir', async () => {
+        const team = (id: string, extra: Record<string, unknown>) => ({
+            id, client_message_id: null, direction: 'outbound', sender: { kind: 'agent', name: 'Rina' }, type: 'interactive',
+            text: 'Mau warna apa?', status: 'sent', timestamp: `2026-10-15T03:0${id.slice(-1)}:00.000Z`, survey: null, attachment: null, location: null, ...extra,
+        });
+        const quick = { kind: 'quick_replies', header: null, footer: null, button_text: null, image_url: null, items: [{ id: 's', title: 'S', description: null, section: null, url: null }] };
+        history = {
+            conversation: { id: 'cv_1', status: 'open', resolved_at: null },
+            survey: null,
+            messages: [
+                team('wco_1', { actions: quick }),
+                team('wco_2', { actions: { kind: 'buttons', header: 'Kain batik', footer: 'Stok 3', button_text: null, image_url: 'https://cdn.test/kain.jpg',
+                    items: [{ id: 'red', title: 'Merah', description: null, section: null, url: null }, { id: 'blue', title: 'Biru', description: null, section: null, url: null }] } }),
+                team('wco_3', { actions: { kind: 'link', header: null, footer: null, button_text: null, image_url: null, items: [{ id: 'u', title: 'Lacak', description: null, section: null, url: 'javascript:alert(1)' }] } }),
+                team('wco_4', { type: 'location', text: null, actions: null, location: { latitude: -6.2, longitude: 106.8, name: 'Toko Kemang', address: 'Jl. Kemang', url: 'https://maps.google.com/?q=-6.2,106.8' } }),
+            ],
+        };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        expect(container.querySelectorAll('.pw-chip')).toHaveLength(0);
+        expect(container.querySelector('.pw-card-img')?.getAttribute('src')).toBe('https://cdn.test/kain.jpg');
+        expect(container.querySelector('.pw-card-header')?.textContent).toBe('Kain batik');
+        expect(container.querySelector('.pw-action-link[href^="javascript"]')).toBeNull();
+        expect(container.querySelector('.pw-location-name')?.textContent).toBe('Toko Kemang');
+        expect((container.querySelector('.pw-location .pw-action-link') as HTMLAnchorElement).href).toBe('https://maps.google.com/?q=-6.2,106.8');
+        const blue = [...container.querySelectorAll<HTMLButtonElement>('.pw-action')].find((button) => button.textContent === 'Biru') as HTMLButtonElement;
+        blue.click();
+        await settle();
+        const posted = sent.find((entry) => entry.url.endsWith('/messages'))?.body as { postback: unknown; text?: string };
+        expect(posted.postback).toEqual({ message_id: 'wco_2', id: 'blue' });
+        expect(posted.text).toBeUndefined();
+        expect([...container.querySelectorAll('.pw-msg[data-side="visitor"] .pw-bubble')].map((b) => b.textContent)).toContain('Biru');
+    });
+
+
     it('kirim: pesan tampil seketika (mengirim…) lalu diterima server dengan id', async () => {
         const { app, container } = await startApp();
         app.command({ name: 'open', args: [] });

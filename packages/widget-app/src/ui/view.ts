@@ -4,7 +4,7 @@ import { errorText, formatNextOpen, replyEstimateText, translate } from '../i18n
 import { renderMarkdown } from '../markdown';
 import { availabilityOf, handoffOffered, needsOfflineForm } from '../store';
 import type { AppState } from '../store';
-import type { ChatMessage } from '../types';
+import type { ChatMessage, MessageActions, MessageLocation } from '../types';
 import { OfflineForm } from './offline';
 import type { OfflineValues } from './offline';
 import { OtpPanel } from './otp';
@@ -20,6 +20,8 @@ export interface ViewActions {
     readonly send: (text: string) => void;
     readonly retry: (clientMessageId: string) => void;
     readonly attach: (file: File) => void;
+    /** Klik pilihan pada pesan tim (W7b) — dikirim sebagai postback. */
+    readonly choose: (messageId: string, item: { id: string; title: string }) => void;
     /** Tautan lampiran kedaluwarsa (gambar gagal dimuat) → ambil ulang riwayat untuk tautan baru. */
     readonly mediaExpired: () => void;
     readonly typing: () => void;
@@ -454,8 +456,9 @@ export class ChatView {
         const atBottom = this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < STICK_TO_BOTTOM_PX;
         // Kartu penilaian hanya di pesan survei TERAKHIR (keadaan survei yang diketahui adalah survei terakhir).
         const lastRating = state.messages.map((message) => message.survey?.kind).lastIndexOf('rating');
+        const lastIndex = state.messages.length - 1;
         this.list.replaceChildren(...state.messages.map((message, index) => this.messageItem(
-            message, state, t, index === lastRating,
+            message, state, t, index === lastRating, index === lastIndex,
         )));
         if (atBottom) {
             this.list.scrollTop = this.list.scrollHeight;
@@ -468,6 +471,7 @@ export class ChatView {
         state: AppState,
         t: (key: MessageKey) => string,
         ratingCard: boolean,
+        last: boolean,
     ): HTMLLIElement {
         const visitor = message.direction === 'inbound';
         const item = this.element('li', 'pw-msg');
@@ -475,11 +479,38 @@ export class ChatView {
         const bubble = this.element('div', 'pw-bubble');
         // Pesan survei dengan kartu penilaian: daftar pilihan bernomor diganti tombol.
         const text = ratingCard ? surveyQuestionOf(message.text) : message.text ?? '';
+        if (message.actions?.image_url && safeMediaUrl(message.actions.image_url)) {
+            const image = this.element('img', 'pw-card-img');
+            image.src = message.actions.image_url;
+            image.alt = message.actions.header ?? '';
+            image.loading = 'lazy';
+            bubble.appendChild(image);
+        }
+        if (message.actions?.header) {
+            const header = this.element('div', 'pw-card-header');
+            header.textContent = message.actions.header;
+            bubble.appendChild(header);
+        }
         if (message.attachment) {
             bubble.appendChild(this.attachmentView(message.attachment, state, t));
         }
         if (text) {
             bubble.appendChild(renderMarkdown(this.doc, text));
+        }
+        if (message.location) {
+            bubble.appendChild(this.locationView(message.location, t));
+        }
+        if (message.actions?.footer) {
+            const footer = this.element('div', 'pw-card-footer');
+            footer.textContent = message.actions.footer;
+            bubble.appendChild(footer);
+        }
+        // Tombol, daftar & tautan menempel di gelembung; balasan cepat hanya di pesan TERAKHIR (standar chat).
+        const actions = message.actions && message.id && !visitor
+            ? this.actionsView(message.id, message.actions, last)
+            : null;
+        if (actions) {
+            bubble.appendChild(actions);
         }
         const meta = this.element('div', 'pw-meta');
         const time = new Date(message.timestamp);
@@ -513,6 +544,108 @@ export class ChatView {
             }, { rate: this.actions.rate, comment: this.actions.surveyComment }));
         }
         return item;
+    }
+
+
+    private actionsView(messageId: string, actions: MessageActions, last: boolean): HTMLElement | null {
+        const items = actions.items.filter((item) => item.id && item.title);
+        if (!items.length || (actions.kind === 'quick_replies' && !last)) {
+            return null;
+        }
+        const choose = (item: { id: string; title: string }): void => {
+            this.actions.interact();
+            this.actions.choose(messageId, { id: item.id, title: item.title });
+        };
+        if (actions.kind === 'link') {
+            const box = this.element('div', 'pw-actions');
+            for (const item of items) {
+                const url = safeMediaUrl(item.url);
+                if (!url || url.startsWith('blob:')) {
+                    continue;
+                }
+                const link = this.element('a', 'pw-action pw-action-link');
+                link.href = url;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = item.title;
+                box.appendChild(link);
+            }
+            return box.childElementCount ? box : null;
+        }
+        if (actions.kind === 'list') {
+            const box = this.element('div', 'pw-actions pw-list');
+            const toggle = this.element('button', 'pw-action');
+            toggle.type = 'button';
+            toggle.textContent = actions.button_text ?? 'Pilih';
+            const panel = this.element('div', 'pw-list-panel');
+            panel.hidden = true;
+            let section: string | null = null;
+            for (const item of items) {
+                if (item.section && item.section !== section) {
+                    section = item.section;
+                    const heading = this.element('div', 'pw-list-section');
+                    heading.textContent = section;
+                    panel.appendChild(heading);
+                }
+                const row = this.element('button', 'pw-list-row');
+                row.type = 'button';
+                const title = this.element('span', 'pw-list-title');
+                title.textContent = item.title;
+                row.appendChild(title);
+                if (item.description) {
+                    const description = this.element('span', 'pw-list-description');
+                    description.textContent = item.description;
+                    row.appendChild(description);
+                }
+                row.addEventListener('click', () => {
+                    choose(item);
+                });
+                panel.appendChild(row);
+            }
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.addEventListener('click', () => {
+                panel.hidden = !panel.hidden;
+                toggle.setAttribute('aria-expanded', String(!panel.hidden));
+            });
+            box.append(toggle, panel);
+            return box;
+        }
+        const box = this.element('div', actions.kind === 'quick_replies' ? 'pw-actions pw-quick' : 'pw-actions');
+        for (const item of items) {
+            const button = this.element('button', actions.kind === 'quick_replies' ? 'pw-chip' : 'pw-action');
+            button.type = 'button';
+            button.textContent = item.title;
+            button.addEventListener('click', () => {
+                choose(item);
+            });
+            box.appendChild(button);
+        }
+        return box;
+    }
+
+
+    private locationView(location: MessageLocation, t: (key: MessageKey) => string): HTMLElement {
+        const box = this.element('div', 'pw-location');
+        if (location.name) {
+            const name = this.element('div', 'pw-location-name');
+            name.textContent = location.name;
+            box.appendChild(name);
+        }
+        if (location.address) {
+            const address = this.element('div', 'pw-location-address');
+            address.textContent = location.address;
+            box.appendChild(address);
+        }
+        const url = safeMediaUrl(location.url);
+        if (url) {
+            const link = this.element('a', 'pw-action pw-action-link');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = t('openMap');
+            box.appendChild(link);
+        }
+        return box;
     }
 
 
