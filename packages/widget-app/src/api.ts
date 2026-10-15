@@ -1,6 +1,6 @@
 import type {
     ConversationPage, CustomerSurvey, OfflineMessageResult, OtpRequestResult, PageInfo, PrechatResult, SendResult,
-    HandoffResult, Session, TranscriptResult, WidgetConfig,
+    HandoffResult, PresignResult, Session, TranscriptResult, WidgetConfig,
 } from './types';
 
 /**
@@ -111,9 +111,38 @@ export class PublicApi {
 
     public send(
         token: string,
-        body: { client_message_id: string; text: string; page?: PageInfo },
+        body: { client_message_id: string; text?: string; attachment_ids?: string[]; page?: PageInfo },
     ): Promise<SendResult> {
         return this.request('POST', '/messages', { token, body });
+    }
+
+
+    /** URL unggah privat untuk satu lampiran (W7a). */
+    public presignAttachment(
+        token: string,
+        body: { filename: string; mime: string; size: number },
+    ): Promise<PresignResult> {
+        return this.request('POST', '/attachments/presign', { token, body });
+    }
+
+
+    /** PUT berkas LANGSUNG ke penyimpanan (bukan API) dengan header yang ditandatangani. */
+    public async upload(target: PresignResult['upload'], file: Blob): Promise<void> {
+        let response: Response;
+        try {
+            response = await this.fetcher(target.url, {
+                method: target.method,
+                // Content-Length dihitung peramban dari berkas — header terlarang tak boleh disetel skrip.
+                headers: Object.fromEntries(target.headers.filter((h) => h.name.toLowerCase() !== 'content-length').map((h) => [h.name, h.value])),
+                body: file,
+                credentials: 'omit',
+            });
+        } catch (error) {
+            throw new ApiError(0, 'network', error instanceof Error ? error.message : 'network error');
+        }
+        if (!response.ok) {
+            throw new ApiError(response.status, 'upload_failed', `HTTP ${String(response.status)}`);
+        }
     }
 
 

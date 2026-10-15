@@ -83,6 +83,12 @@ export interface WidgetConfig {
     /** Server lama tak mengirimnya → dianggap selalu buka. */
     readonly business_hours?: BusinessHours | null;
     readonly availability?: Availability | null;
+    /** Lampiran pengunjung (W7a): jenis yang diizinkan & batas ukuran. */
+    readonly attachments?: {
+        readonly enabled: boolean;
+        readonly max_mb: number;
+        readonly mime_allow: readonly string[];
+    };
     /** AI menjawab lebih dulu di widget ini (W6c) → tombol "Bicara dengan tim". Server lama tak mengirimnya. */
     readonly ai?: { readonly enabled: boolean };
     readonly captcha: { readonly mode: string; readonly provider: 'turnstile' | null; readonly site_key: string | null };
@@ -159,6 +165,30 @@ export interface ChatMessage {
     readonly timestamp: string;
     /** W5c; server lama tak mengirimnya. */
     readonly survey?: SurveyMarker | null;
+    /** Lampiran (W7a). Tautan lampiran pengunjung bertanda tangan & kedaluwarsa (`expires_at`). */
+    readonly attachment?: MessageAttachment | null;
+}
+
+export interface MessageAttachment {
+    readonly type: string;
+    /** `https:` dari server, atau `blob:` pratinjau lokal sebelum terkirim. */
+    readonly url: string | null;
+    readonly mime_type: string | null;
+    readonly filename: string | null;
+    readonly size: number | null;
+    readonly expires_at: string | null;
+}
+
+/** `POST /attachments/presign` (W7a): URL PUT privat 5 menit; header WAJIB dikirim persis. */
+export interface PresignResult {
+    readonly attachment_id: string;
+    readonly upload: {
+        readonly url: string;
+        readonly method: string;
+        readonly headers: readonly { readonly name: string; readonly value: string }[];
+        readonly expires_at: string;
+    };
+    readonly max_bytes: number;
 }
 
 export interface SendResult {

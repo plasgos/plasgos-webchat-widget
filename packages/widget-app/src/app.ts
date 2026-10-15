@@ -21,7 +21,14 @@ import type { PrechatValues } from './ui/prechat';
 import { ChatView } from './ui/view';
 
 /** Jeda coba ulang antrean kirim saat jaringan/server bermasalah. */
+/** Galat lampiran — ditampilkan ke pengunjung, pesannya ditandai gagal (bisa dicoba lagi). */
+const ATTACHMENT_ERROR_CODES: readonly string[] = [
+    'attachments_disabled', 'attachment_not_allowed', 'attachment_too_large', 'attachment_rejected',
+    'attachment_not_found', 'attachments_unavailable', 'upload_failed',
+];
+
 const RETRY_STEPS_MS = [2000, 5000, 10000, 30000];
+const MEDIA_REFRESH_MS = 30_000;
 const TYPING_THROTTLE_MS = 2500;
 const TYPING_IDLE_MS = 3000;
 /** Konfigurasi (jam kerja, estimasi balas) dibaca ulang berkala; tepat saat jam buka tiba status dibuka lokal dulu. */
@@ -108,6 +115,11 @@ export class WidgetApp {
 
     private sending = false;
 
+    /** Berkas pesan berlampiran yang belum terkirim (W7a) — di memori tab ini saja, bukan di store/antar-tab. */
+    private readonly uploads = new Map<string, { file: Blob; attachmentId: string | null }>();
+
+    private mediaRefreshedAt = 0;
+
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     private retryAttempt = 0;
@@ -177,6 +189,18 @@ export class WidgetApp {
             },
             send: (text) => {
                 this.send(text);
+            },
+            attach: (file) => {
+                this.attach(file);
+            },
+            mediaExpired: () => {
+                // Tautan lampiran privat berumur 15 menit — gambar gagal dimuat = ambil ulang riwayat (≤ 1×/30 dtk).
+                const now = Date.now();
+                if (now - this.mediaRefreshedAt < MEDIA_REFRESH_MS) {
+                    return;
+                }
+                this.mediaRefreshedAt = now;
+                void this.syncHistory().catch(() => undefined);
             },
             retry: (clientMessageId) => {
                 this.retry(clientMessageId);
@@ -518,6 +542,65 @@ export class WidgetApp {
     }
 
 
+    /**
+     * Lampiran (W7a): diperiksa dulu terhadap pengaturan widget (jenis & ukuran — server memeriksa ulang, termasuk
+     * ISI berkas), lalu masuk antrean seperti pesan biasa dengan pratinjau lokal.
+     */
+    private attach(file: File): void {
+        const settings = this.store.get().config?.attachments;
+        if (!settings?.enabled) {
+            this.store.update({ notice: { code: 'attachments_disabled', fatal: false } });
+            return;
+        }
+        if (!settings.mime_allow.includes(file.type)) {
+            this.store.update({ notice: { code: 'attachment_not_allowed', fatal: false } });
+            return;
+        }
+        if (file.size <= 0 || file.size > settings.max_mb * 1024 * 1024) {
+            this.store.update({ notice: { code: 'attachment_too_large', vars: { mb: settings.max_mb }, fatal: false } });
+            return;
+        }
+        const clientMessageId = this.env.window.crypto.randomUUID();
+        const image = file.type.startsWith('image/');
+        const preview = image && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
+        this.uploads.set(clientMessageId, { file, attachmentId: null });
+        const message: ChatMessage = {
+            id: null,
+            client_message_id: clientMessageId,
+            direction: 'inbound',
+            sender: { kind: 'customer', name: null },
+            type: image ? 'image' : 'document',
+            text: null,
+            status: 'pending',
+            timestamp: new Date().toISOString(),
+            attachment: { type: image ? 'image' : 'document', url: preview, mime_type: file.type, filename: file.name, size: file.size, expires_at: null },
+        };
+        this.store.update((state) => ({ messages: upsertMessages(state.messages, [message]) }));
+        void this.flushOutbox();
+    }
+
+
+    /** Unggah berkas pesan ke penyimpanan (sekali per `attachment_id`) → id untuk `POST /messages`. */
+    private async uploadedAttachmentId(clientMessageId: string): Promise<string | null> {
+        const pending = this.uploads.get(clientMessageId);
+        if (!pending) {
+            return null;
+        }
+        if (pending.attachmentId) {
+            return pending.attachmentId;
+        }
+        const file = pending.file instanceof File ? pending.file : null;
+        const presigned = await this.session.withToken((token) => this.api.presignAttachment(token, {
+            filename: file?.name ?? 'lampiran',
+            mime: pending.file.type,
+            size: pending.file.size,
+        }));
+        await this.api.upload(presigned.upload, pending.file);
+        pending.attachmentId = presigned.attachment_id;
+        return presigned.attachment_id;
+    }
+
+
     private retry(clientMessageId: string): void {
         this.store.update((state) => ({
             messages: state.messages.map((message) => message.client_message_id === clientMessageId && message.status === 'failed'
@@ -537,7 +620,7 @@ export class WidgetApp {
         try {
             for (;;) {
                 const next = this.store.get().messages.find((message) => message.direction === 'inbound' && message.status === 'pending');
-                if (!next?.client_message_id || !next.text) {
+                if (!next?.client_message_id || (!next.text && !this.uploads.has(next.client_message_id))) {
                     return;
                 }
                 if (!(await this.sendOne(next))) {
@@ -553,11 +636,14 @@ export class WidgetApp {
     private async sendOne(message: ChatMessage): Promise<boolean> {
         const clientMessageId = message.client_message_id ?? '';
         try {
+            const attachmentId = await this.uploadedAttachmentId(clientMessageId);
             const result = await this.session.withToken((token) => this.api.send(token, {
                 client_message_id: clientMessageId,
-                text: message.text ?? '',
+                ...(message.text ? { text: message.text } : {}),
+                ...(attachmentId ? { attachment_ids: [attachmentId] } : {}),
                 page: this.page,
             }));
+            this.uploads.delete(clientMessageId);
             const accepted: ChatMessage = { ...message, id: result.message_id, status: 'accepted' };
             this.store.update((state) => ({
                 messages: upsertMessages(state.messages, [accepted]),
@@ -574,6 +660,19 @@ export class WidgetApp {
 
     /** @returns true bila antrean boleh lanjut ke pesan berikutnya. */
     private onSendError(clientMessageId: string, error: unknown): boolean {
+        // Lampiran gagal: kirim ulang mengunggah dari awal (URL & id unggahan lama tak dipakai lagi).
+        const upload = this.uploads.get(clientMessageId);
+        if (upload) {
+            upload.attachmentId = null;
+        }
+        if (error instanceof ApiError && ATTACHMENT_ERROR_CODES.includes(error.code)) {
+            const mb = this.store.get().config?.attachments?.max_mb ?? 10;
+            this.store.update((state) => ({
+                messages: state.messages.map((message) => message.client_message_id === clientMessageId ? { ...message, status: 'failed' } : message),
+                notice: { code: error.code, vars: { mb }, fatal: false },
+            }));
+            return true;
+        }
         if (error instanceof ApiError && error.transient) {
             const delay = error.code === 'rate_limited' && error.retryAfterSeconds ? error.retryAfterSeconds * 1000 : this.nextRetryDelay();
             // Batas laju & plafon percakapan baru (429) ditampilkan; galat jaringan/server cukup indikator koneksi.

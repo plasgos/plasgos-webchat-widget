@@ -78,6 +78,10 @@ let emailOnFile = false;
 let history: Record<string, unknown> | null = null;
 /** `ai.enabled` di konfigurasi (W6c); null = server lama (tanpa kolom). */
 let aiEnabled: boolean | null = null;
+/** Pengaturan lampiran di konfigurasi (W7a); null = server lama. */
+let attachmentsConfig: Record<string, unknown> | null = null;
+/** Permintaan PUT ke penyimpanan (bukan API). */
+const uploads: { url: string; headers: Record<string, string>; size: number }[] = [];
 /** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
 const identifyReplies: Response[] = [];
 
@@ -86,11 +90,16 @@ function fakeServer(): void {
 }
 
 function route(url: string, init?: RequestInit): Response {
+    if (url.startsWith('https://storage.test/')) {
+        const headers = { ...(init?.headers as Record<string, string>) };
+        uploads.push({ url, headers, size: (init?.body as Blob).size });
+        return new Response(null, { status: 200 });
+    }
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
-        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(aiEnabled === null ? {} : { ai: { enabled: aiEnabled } }), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(aiEnabled === null ? {} : { ai: { enabled: aiEnabled } }), ...(attachmentsConfig ? { attachments: attachmentsConfig } : {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
     }
     if (url.endsWith('/otp/request')) {
         return json(200, { sent: true, expires_in: 600 });
@@ -121,6 +130,10 @@ function route(url: string, init?: RequestInit): Response {
         const payload = body as { score?: number; comment?: string };
         const survey = { status: 'answered', scale: 5, score: payload.score ?? 4, satisfied: true, comment: payload.comment ?? null, comment_allowed: !payload.comment, sent_at: null, expires_at: null, answered_at: '2026-10-15T03:00:00.000Z' };
         return json(200, { survey });
+    }
+    if (url.endsWith('/attachments/presign')) {
+        const payload = body as { mime: string; size: number };
+        return json(201, { attachment_id: 'att_000000000000000000000001', upload: { url: 'https://storage.test/private/webchat/x.pdf?sig=1', method: 'PUT', headers: [{ name: 'Content-Type', value: payload.mime }, { name: 'Content-Length', value: String(payload.size) }], expires_at: '2026-10-15T10:05:00.000Z' }, max_bytes: 1048576 });
     }
     if (url.endsWith('/handoff')) {
         return json(200, { handoff: { active: true, already: false } });
@@ -167,6 +180,8 @@ describe('aplikasi widget (iframe)', () => {
         emailOnFile = false;
         history = null;
         aiEnabled = null;
+        attachmentsConfig = null;
+        uploads.length = 0;
         identifyReplies.length = 0;
         socket.emitted.length = 0;
         socket.handlers.clear();
@@ -555,6 +570,47 @@ describe('aplikasi widget (iframe)', () => {
         const { app, container } = await startApp();
         app.command({ name: 'open', args: [] });
         expect((container.querySelector('.pw-handoff') as HTMLButtonElement).hidden).toBe(true);
+    });
+
+
+    it('lampiran: tombol klip hanya bila diizinkan; berkas → presign → PUT ke penyimpanan (header persis) → POST /messages attachment_ids; kartu berkas tampil', async () => {
+        const off = await startApp();
+        off.app.command({ name: 'open', args: [] });
+        expect((off.container.querySelector('.pw-attach') as HTMLButtonElement).hidden).toBe(true);
+
+        document.body.replaceChildren();
+        attachmentsConfig = { enabled: true, max_mb: 1, mime_allow: ['image/png', 'application/pdf'] };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const button = container.querySelector('.pw-attach') as HTMLButtonElement;
+        expect(button.hidden).toBe(false);
+        const input = container.querySelector('.pw-file-input') as HTMLInputElement;
+        expect(input.accept).toBe('image/png,application/pdf');
+        const file = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31])], 'katalog.pdf', { type: 'application/pdf' });
+        Object.defineProperty(input, 'files', { value: [file], configurable: true });
+        input.dispatchEvent(new Event('change'));
+        await settle();
+        await settle();
+        expect(sent.find((entry) => entry.url.endsWith('/attachments/presign'))?.body).toEqual({ filename: 'katalog.pdf', mime: 'application/pdf', size: 6 });
+        expect(uploads).toHaveLength(1);
+        expect(uploads[0]?.headers).toEqual({ 'Content-Type': 'application/pdf' });
+        const message = sent.find((entry) => entry.url.endsWith('/messages'))?.body as { attachment_ids: string[]; text?: string };
+        expect(message.attachment_ids).toEqual(['att_000000000000000000000001']);
+        expect(message.text).toBeUndefined();
+        expect(container.querySelector('.pw-attachment-name')?.textContent).toBe('katalog.pdf');
+    });
+
+
+    it('lampiran: jenis di luar daftar widget ditolak di klien tanpa memanggil server (pemberitahuan tampil)', async () => {
+        attachmentsConfig = { enabled: true, max_mb: 1, mime_allow: ['image/png'] };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        const input = container.querySelector('.pw-file-input') as HTMLInputElement;
+        Object.defineProperty(input, 'files', { value: [new File(['<html>'], 'halaman.html', { type: 'text/html' })], configurable: true });
+        input.dispatchEvent(new Event('change'));
+        await settle();
+        expect(sent.some((entry) => entry.url.endsWith('/attachments/presign'))).toBe(false);
+        expect(container.querySelector('.pw-notice')?.textContent).toBe('Jenis berkas ini tidak bisa dikirim.');
     });
 
 

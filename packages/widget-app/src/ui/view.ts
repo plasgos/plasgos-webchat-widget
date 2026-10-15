@@ -19,6 +19,9 @@ export interface ViewActions {
     readonly close: () => void;
     readonly send: (text: string) => void;
     readonly retry: (clientMessageId: string) => void;
+    readonly attach: (file: File) => void;
+    /** Tautan lampiran kedaluwarsa (gambar gagal dimuat) → ambil ulang riwayat untuk tautan baru. */
+    readonly mediaExpired: () => void;
     readonly typing: () => void;
     readonly toggleSound: () => void;
     readonly interact: () => void;
@@ -45,7 +48,22 @@ const ICONS = {
     soundOn: 'M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6',
     soundOff: 'M4 9h4l5-4v14l-5-4H4zM16 9l5 6M21 9l-5 6',
     mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
+    clip: 'M16 7l-7.5 7.5a2 2 0 0 0 2.8 2.8L19 9.6a4 4 0 0 0-5.7-5.7L5.6 11.6a6 6 0 0 0 8.5 8.5L20 14.2',
+    file: 'M6 3h8l4 4v14H6zM14 3v4h4',
 } as const;
+
+/** Tautan lampiran yang boleh dirender: dari server (`https:`) atau pratinjau lokal (`blob:`). */
+function safeMediaUrl(url: string | null | undefined): string | null {
+    return typeof url === 'string' && /^(https:|blob:)/i.test(url) ? url : null;
+}
+
+function fileSize(bytes: number | null, locale: string): string {
+    if (bytes === null || !Number.isFinite(bytes)) {
+        return '';
+    }
+    const format = new Intl.NumberFormat(locale === 'id' ? 'id-ID' : 'en-US', { maximumFractionDigits: 1 });
+    return bytes >= 1024 * 1024 ? `${format.format(bytes / (1024 * 1024))} MB` : `${format.format(Math.max(1, bytes / 1024))} KB`;
+}
 
 const STATUS_KEY: Readonly<Record<string, MessageKey>> = {
     pending: 'sending',
@@ -154,6 +172,10 @@ export class ChatView {
 
     private readonly sendButton: HTMLButtonElement;
 
+    private readonly attachButton: HTMLButtonElement;
+
+    private readonly fileInput: HTMLInputElement;
+
     private renderedKeys = '';
 
 
@@ -226,7 +248,14 @@ export class ChatView {
         this.sendButton = this.element('button', 'pw-send');
         this.sendButton.type = 'submit';
         this.sendButton.appendChild(this.icon(ICONS.send, 20));
-        composer.append(label, this.input, this.sendButton);
+        // Lampiran (W7a): tombol klip + input berkas tersembunyi (jenis dari pengaturan widget).
+        this.attachButton = this.element('button', 'pw-attach');
+        this.attachButton.type = 'button';
+        this.attachButton.appendChild(this.icon(ICONS.clip, 20));
+        this.fileInput = this.element('input', 'pw-file-input');
+        this.fileInput.type = 'file';
+        this.fileInput.hidden = true;
+        composer.append(label, this.attachButton, this.fileInput, this.input, this.sendButton);
         this.window.append(
             header, this.notice, this.otpEntry, this.list, this.typingLine, this.captcha, this.prechat.element,
             this.otp.element, this.offline.element, this.transcript.element, this.handoffEntry, composer,
@@ -354,6 +383,12 @@ export class ChatView {
             || needsIdentity(state) || state.prechatPending || offlineForm;
         this.input.disabled = blocked;
         this.sendButton.disabled = blocked;
+        const attachments = state.config?.attachments;
+        this.attachButton.hidden = !attachments?.enabled;
+        this.attachButton.disabled = blocked;
+        this.attachButton.setAttribute('aria-label', t('attach'));
+        this.attachButton.title = t('attach');
+        this.fileInput.accept = (attachments?.mime_allow ?? []).join(',');
     }
 
 
@@ -411,7 +446,7 @@ export class ChatView {
         const survey = state.survey;
         const surveyKey = survey ? [survey.status, survey.score, survey.comment, survey.comment_allowed].join(':') : '';
         const signature = `${state.locale}|${surveyKey}|${String(state.surveyBusy)}|${state.surveyError ?? ''}|`
-            + state.messages.map((message) => `${messageKey(message)}|${message.status ?? ''}|${message.id ?? ''}`).join(',');
+            + state.messages.map((message) => `${messageKey(message)}|${message.status ?? ''}|${message.id ?? ''}|${message.attachment?.url ?? ''}`).join(',');
         if (signature === this.renderedKeys) {
             return;
         }
@@ -440,7 +475,12 @@ export class ChatView {
         const bubble = this.element('div', 'pw-bubble');
         // Pesan survei dengan kartu penilaian: daftar pilihan bernomor diganti tombol.
         const text = ratingCard ? surveyQuestionOf(message.text) : message.text ?? '';
-        bubble.appendChild(renderMarkdown(this.doc, text));
+        if (message.attachment) {
+            bubble.appendChild(this.attachmentView(message.attachment, state, t));
+        }
+        if (text) {
+            bubble.appendChild(renderMarkdown(this.doc, text));
+        }
         const meta = this.element('div', 'pw-meta');
         const time = new Date(message.timestamp);
         const clock = Number.isNaN(time.getTime())
@@ -476,6 +516,42 @@ export class ChatView {
     }
 
 
+    /** Gambar → pratinjau (klik = buka); berkas lain → kartu nama & ukuran. Tanpa tautan sah → nama saja. */
+    private attachmentView(attachment: NonNullable<ChatMessage['attachment']>, state: AppState, t: (key: MessageKey) => string): HTMLElement {
+        const url = safeMediaUrl(attachment.url);
+        const name = attachment.filename ?? t('attachmentOpen');
+        if (attachment.type === 'image' && url) {
+            const link = this.element('a', 'pw-attachment-image');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.setAttribute('aria-label', `${t('attachmentOpen')}: ${name}`);
+            const image = this.element('img', 'pw-attachment-img');
+            image.src = url;
+            image.alt = name;
+            image.loading = 'lazy';
+            image.addEventListener('error', () => {
+                this.actions.mediaExpired();
+            }, { once: true });
+            link.appendChild(image);
+            return link;
+        }
+        const card = this.element(url ? 'a' : 'div', 'pw-attachment-file');
+        if (url && card instanceof HTMLAnchorElement) {
+            card.href = url;
+            card.target = '_blank';
+            card.rel = 'noopener noreferrer';
+            card.setAttribute('download', name);
+        }
+        const label = this.element('span', 'pw-attachment-name');
+        label.textContent = name;
+        const size = this.element('span', 'pw-attachment-size');
+        size.textContent = fileSize(attachment.size, state.locale);
+        card.append(this.icon(ICONS.file, 18), label, size);
+        return card;
+    }
+
+
     private themeOf(theme: string | undefined): string {
         if (theme === 'dark' || theme === 'light') {
             return theme;
@@ -490,6 +566,17 @@ export class ChatView {
 
     private bind(composer: HTMLFormElement, label: HTMLLabelElement): void {
         label.textContent = 'Pesan';
+        this.attachButton.addEventListener('click', () => {
+            this.actions.interact();
+            this.fileInput.click();
+        });
+        this.fileInput.addEventListener('change', () => {
+            const file = this.fileInput.files?.[0];
+            this.fileInput.value = '';
+            if (file) {
+                this.actions.attach(file);
+            }
+        });
         this.launcher.addEventListener('click', () => {
             this.actions.interact();
             this.actions.toggle();
