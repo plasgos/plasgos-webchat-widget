@@ -767,6 +767,17 @@ describe('aplikasi widget (iframe)', () => {
     });
 
 
+    it('kode WhatsApp terpakai → sesi diakhiri dengan pesan "dilanjutkan di WhatsApp" (W10b)', async () => {
+        const { app, port, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        socket.serverEmit('session.revoked', { reason: 'continued_on_whatsapp' });
+
+        expect(container.querySelector('.pw-notice')?.textContent).toBe('Percakapan ini dilanjutkan di WhatsApp. Muat ulang halaman untuk chat baru di sini.');
+        expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(true);
+        expect(last(port.events)).toEqual({ name: 'error', data: { code: 'continued_on_whatsapp' } });
+    });
+
+
     describe('pesan proaktif (W8b)', () => {
         const PROACTIVE = { id: 'wcp_0123456789abcdef0123456789abcdef', text: 'Bingung pilih paket? Kami bantu.', sender: { kind: 'system', name: 'Tim Toko' }, at: '2026-10-15T10:00:00.000Z' };
         const claims = () => sent.filter((entry) => entry.url.endsWith('/proactive')).map((entry) => entry.body);

@@ -857,7 +857,8 @@ export class WidgetApp {
                 break;
             case 'session.revoked':
                 this.session.clear();
-                this.fatal('session_revoked');
+                // Kode "Lanjutkan di WhatsApp" terpakai (W8d/W10b): percakapan pindah ke WhatsApp, sesi ini diakhiri.
+                this.fatal((payload as Payload<'session.revoked'>).reason === 'continued_on_whatsapp' ? 'continued_on_whatsapp' : 'session_revoked');
                 break;
             case 'team.presence':
                 this.store.update({ teamOnline: (payload as Payload<'team.presence'>).online });

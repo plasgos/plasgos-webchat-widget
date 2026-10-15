@@ -8,7 +8,7 @@ import { WIDGET_ID_PATTERN } from '@plasgos/webchat-protocol';
 import { WidgetApp } from './app';
 import type { HostPort } from './app';
 import { HostBridge, parentOriginOf } from './bridge';
-import { takeStandaloneIdentity } from './standalone';
+import { standaloneApi, stripIdentityFragment } from './standalone';
 
 const ROOT_ID = 'plasgos-webchat-app';
 
@@ -28,18 +28,21 @@ function boot(win: Window, doc: Document, widgetId: string): void {
     if (!embedded) {
         // Dibuka langsung (halaman penuh / WebView): tanpa loader, jendela chat langsung terbuka.
         const host: HostPort = { frame: () => undefined, state: () => undefined, event: () => undefined };
-        const page = takeStandaloneIdentity(win.location, (url) => {
+        const page = stripIdentityFragment(win.location, (url) => {
             win.history.replaceState(win.history.state, '', url);
         });
+        if (page.stripped) {
+            console.warn('[Plasgos Webchat] #identity_token diabaikan — aplikasi memberi token lewat Plasgos("identify", { token })');
+        }
         const app = new WidgetApp({ window: win, document: doc, container, widgetId, host });
         app.init({
             options: { widgetId },
             page: { url: page.url, title: doc.title, referrer: doc.referrer },
             hostOrigin: win.location.origin,
         });
-        if (page.identityToken !== null) {
-            app.command({ name: 'identify', args: [{ token: page.identityToken }] });
-        }
+        Reflect.set(win, 'Plasgos', standaloneApi((command) => {
+            app.command(command);
+        }));
         app.openStandalone();
         return;
     }

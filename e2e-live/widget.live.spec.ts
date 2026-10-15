@@ -255,12 +255,18 @@ test('pelanggan login di website: Plasgos("identify") → sesi widget terverifik
     }), { timeout: 15_000 }).toBe('verified');
 });
 
-test('halaman chat penuh /m (WebView & tautan langsung): jendela terbuka, pesan sampai inbox; #identity_token → terverifikasi, fragmen dihapus', async ({ page }) => {
+test('halaman chat penuh /m (WebView & tautan langsung): jendela terbuka, pesan sampai inbox; token dari aplikasi lewat Plasgos("identify"), token di URL diabaikan', async ({ page }) => {
     const sub = `aplikasi-${String(Date.now())}`;
-    await page.goto(`${WIDGET_ORIGIN}/m/${widgetId}?utm_source=instagram#identity_token=${identityToken(sub)}`);
+    // Tautan berisi token (pola login CSRF) → diabaikan & dihapus dari alamat.
+    await page.goto(`${WIDGET_ORIGIN}/m/${widgetId}?utm_source=instagram#identity_token=${identityToken(`penyerang-${sub}`)}`);
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect.poll(() => page.evaluate(() => location.hash)).toBe('');
     expect(page.url()).toBe(`${WIDGET_ORIGIN}/m/${widgetId}?utm_source=instagram`);
+
+    // Aplikasi mobile menyuntikkan JavaScript ke WebView.
+    await page.evaluate((token) => {
+        (window as unknown as { Plasgos: (...args: unknown[]) => void }).Plasgos('identify', { token });
+    }, identityToken(sub));
 
     const question = `Dari aplikasi ${String(Date.now())}`;
     const input = page.getByRole('textbox', { name: 'Pesan', exact: true });
