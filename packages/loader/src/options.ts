@@ -45,14 +45,12 @@ function offsetOf(value: unknown): LoaderOptions['offset'] {
 
 /**
  * `identityToken` di opsi `boot` (halaman server-rendered untuk pelanggan yang login): boot + identify dalam satu
- * panggilan. Bukan opsi widget — diteruskan sebagai perintah `identify`.
+ * panggilan. Bukan opsi widget — diteruskan sebagai perintah `identify`. `null` EKSPLISIT = tak ada yang login (mis.
+ * setelah logout) → diteruskan apa adanya; tak diisi / tak sah = `undefined` (tak ada pernyataan identitas).
  */
-export function identityTokenOf(input: unknown): string | null {
-    if (!isRecord(input)) {
-        return null;
-    }
-    const token = input['identityToken'];
-    return typeof token === 'string' && token.length > 0 && token.length <= 8192 ? token : null;
+export function identityTokenOf(input: unknown): string | null | undefined {
+    const token = isRecord(input) ? input['identityToken'] : undefined;
+    return token === null || (typeof token === 'string' && token.length > 0 && token.length <= 8192) ? token : undefined;
 }
 
 /**

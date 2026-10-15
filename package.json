@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "pnpm -r run build && node scripts/build-fixtures.mjs",
-    "typecheck": "pnpm -r run typecheck && tsc -p e2e/tsconfig.json --noEmit && tsc -p e2e-live/tsconfig.json --noEmit && tsc -p e2e-apps/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit && tsc -p fixtures/tsconfig.json --noEmit",
+    "typecheck": "pnpm -r run typecheck && tsc -p e2e/tsconfig.json --noEmit && tsc -p e2e-live/tsconfig.json --noEmit && tsc -p e2e-apps/tsconfig.json --noEmit && tsc -p e2e-wordpress/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit && tsc -p fixtures/tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:apps": "LINT_APPS=1 eslint fixtures/apps",
     "test": "vitest run",
@@ -21,6 +21,7 @@
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm size && pnpm e2e",
     "e2e:live": "playwright test -c playwright.live.config.ts",
     "e2e:apps": "playwright test -c playwright.apps.config.ts",
+    "e2e:wordpress": "playwright test -c playwright.wordpress.config.ts",
     "apps:build": "node scripts/build-apps.mjs",
     "cdn": "node scripts/cdn/cli.mjs"
   },

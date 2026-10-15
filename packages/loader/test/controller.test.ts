@@ -147,6 +147,24 @@ describe('controller loader', () => {
     });
 
 
+    it('boot dengan identityToken: null eksplisit (setelah logout) = identify { token: null }; tak diisi = tanpa identify', () => {
+        const webchat = controller();
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager', identityToken: null }]);
+        vi.advanceTimersByTime(10);
+        const posted = vi.spyOn(iframes()[0]?.contentWindow as Window, 'postMessage').mockImplementation(() => undefined);
+        fromWidget(createMessage('widget.ready', {}));
+
+        type Posted = { type: string; payload: Record<string, unknown> };
+        const commands = posted.mock.calls.map(([message]) => message as Posted).filter((message) => message.type === 'host.command');
+        expect(commands.map((message) => message.payload)).toEqual([{ name: 'identify', args: [{ token: null }] }]);
+
+        posted.mockClear();
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager' }]);
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager', identityToken: 42 }]);
+        expect(posted.mock.calls.map(([message]) => message as Posted).filter((message) => message.type === 'host.command')).toEqual([]);
+    });
+
+
     it('tanpa widget.ready dalam 10 detik → widget dilepas, peringatan & event error', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         const webchat = controller();

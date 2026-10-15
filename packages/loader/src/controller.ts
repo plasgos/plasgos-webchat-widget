@@ -172,7 +172,7 @@ export class WebchatController {
         }
 
         const identityToken = identityTokenOf(input);
-        if (identityToken) {
+        if (identityToken !== undefined) {
             this.command('identify', [{ token: identityToken }]);
         }
     }

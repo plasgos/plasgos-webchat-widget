@@ -127,6 +127,22 @@ lintas navigasi (tanpa handshake ulang).
 | `sveltekit` | 4516 | `@plasgos/webchat-svelte` di layout akar, `page` dari `$app/state` (SvelteKit 3: konfigurasi lewat plugin Vite) |
 | `astro` | 4517 | `loadWebchat` dalam `<script>` layout + View Transitions (`ClientRouter`) |
 
+### WordPress + plugin Plasgos CRM
+
+`fixtures/apps/wordpress` = WordPress sungguhan (Docker, port 4518, tema blok bawaan) dengan plugin dari repo tetangga
+`plasgos-wordpress` (`PLASGOS_WORDPRESS_DIR`, bawaan `../plasgos-wordpress`; jalankan `composer install` di sana dulu).
+Plugin diarahkan ke loader & stub iframe server fixture (`PLASGOS_CRM_WEBCHAT_LOADER_URL` +
+`PLASGOS_CRM_WEBCHAT_WIDGET_ORIGIN`).
+
+```bash
+pnpm build
+PW_CHROMIUM_CHANNEL=chrome pnpm e2e:wordpress   # KEEP=1 membiarkan situs menyala (admin/admin)
+```
+
+Diuji: satu iframe dari origin widget, pengunjung tamu = `identify { token: null }`, tombol shortcode
+`[plasgos_webchat]` membuka chat, pelanggan login = token identitas dari server WordPress (baru tiap halaman), logout
+= kembali `null`. Halaman WordPress dimuat penuh, jadi iframe memang dipasang ulang tiap halaman.
+
 ## Rilis CDN
 
 Versi terkunci immutable + alias `v1` (5 menit), SRI di manifest & catatan rilis, rollback = pindah alias:

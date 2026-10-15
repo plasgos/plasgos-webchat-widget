@@ -87,6 +87,8 @@ let whatsappEnabled: boolean | null = null;
 const proactiveReplies: unknown[] = [];
 /** Permintaan PUT ke penyimpanan (bukan API). */
 const uploads: { url: string; headers: Record<string, string>; size: number }[] = [];
+/** Isian tambahan jawaban `POST /sessions` (mis. sesi tersimpan yang sudah terverifikasi). */
+let bootSession: Record<string, unknown> = {};
 /** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
 const identifyReplies: Response[] = [];
 
@@ -119,10 +121,10 @@ function route(url: string, init?: RequestInit): Response {
         return json(200, { trust_level: 'contact_provided', prechat_completed: true });
     }
     if (url.endsWith('/sessions/identify')) {
-        return identifyReplies.shift() ?? json(200, { access_token: 'akses-terverifikasi', expires_in: 900, refresh_token: 'rt-2', visitor_id: 'vis_1', trust_level: 'verified', conversation: null });
+        return identifyReplies.shift() ?? json(200, { access_token: 'akses-terverifikasi', expires_in: 900, refresh_token: 'rt-2', visitor_id: 'vis_1', trust_level: 'verified', verification_method: 'identity_token', conversation: null });
     }
     if (url.endsWith('/sessions')) {
-        return json(200, { access_token: 'akses', expires_in: 900, refresh_token: 'rt', visitor_id: 'vis_1', trust_level: 'anonymous', conversation: null, prechat_completed: prechatCompleted, email_on_file: emailOnFile });
+        return json(200, { access_token: 'akses', expires_in: 900, refresh_token: 'rt', visitor_id: 'vis_1', trust_level: 'anonymous', conversation: null, prechat_completed: prechatCompleted, email_on_file: emailOnFile, ...bootSession });
     }
     if (url.endsWith('/offline-messages')) {
         const payload = body as { client_message_id: string };
@@ -197,6 +199,7 @@ describe('aplikasi widget (iframe)', () => {
         proactiveReplies.length = 0;
         uploads.length = 0;
         identifyReplies.length = 0;
+        bootSession = {};
         socket.emitted.length = 0;
         socket.handlers.clear();
         socket.fake.connected = false;
@@ -266,6 +269,39 @@ describe('aplikasi widget (iframe)', () => {
         app.command({ name: 'identify', args: [{ token: 'jwt-kedaluwarsa' }] });
         await settle();
         expect(port.events.find((event) => event.name === 'error')?.data).toEqual({ code: 'identity_invalid', reason: 'expired' });
+    });
+
+
+    it('website menyatakan tak ada yang login (identify token null) → sesi hasil login website diakhiri, sesi anonim baru', async () => {
+        bootSession = { trust_level: 'verified', verification_method: 'identity_token' };
+        const { app, port } = await startApp();
+        expect(last(port.states)).toMatchObject({ trustLevel: 'verified' });
+
+        bootSession = {};
+        app.command({ name: 'identify', args: [{ token: null }] });
+        await settle();
+        await settle();
+
+        expect(sent.filter((entry) => entry.url.endsWith('/sessions/shutdown'))).toHaveLength(1);
+        expect(sent.filter((entry) => entry.url.endsWith('/sessions'))).toHaveLength(2);
+        expect(last(port.states)).toMatchObject({ trustLevel: 'anonymous' });
+    });
+
+
+    it('tak ada yang login TIDAK menyentuh sesi anonim maupun verifikasi kode email (tak terkait login website)', async () => {
+        bootSession = { trust_level: 'verified', verification_method: 'otp_email' };
+        const { app, port } = await startApp();
+        app.command({ name: 'identify', args: [{ token: null }] });
+        await settle();
+        expect(sent.filter((entry) => entry.url.endsWith('/sessions/shutdown'))).toHaveLength(0);
+        expect(last(port.states)).toMatchObject({ trustLevel: 'verified' });
+
+        bootSession = {};
+        const anonymous = await startApp();
+        anonymous.app.command({ name: 'identify', args: [{ token: null }] });
+        await settle();
+        expect(sent.filter((entry) => entry.url.endsWith('/sessions/shutdown'))).toHaveLength(0);
+        expect(sent.filter((entry) => entry.url.endsWith('/sessions/identify'))).toHaveLength(0);
     });
 
 

@@ -58,6 +58,15 @@ type Payload<K extends keyof ServerEvents> = Parameters<ServerEvents[K]>[0];
  * Aplikasi widget di dalam iframe: konfigurasi → sesi → riwayat → realtime; kirim pesan optimistis dengan antrean
  * coba ulang; tanda sampai/dibaca; belum dibaca + suara; sinkron antar-tab; perintah dari loader.
  */
+/**
+ * `identify` dengan `{ token: null }` eksplisit = website menyatakan TAK ADA yang login (loader: `boot` dengan
+ * `identityToken: null`, mis. halaman server-rendered setelah logout) — bukan sekadar "tanpa token".
+ */
+function isSignedOut(value: unknown): boolean {
+    return typeof value === 'object' && value !== null && Reflect.has(value, 'token') && Reflect.get(value, 'token') === null;
+}
+
+
 /** Argumen perintah `identify`: `{ token }` (bentuk resmi) atau string token. */
 function identityTokenOf(value: unknown): string | null {
     const token: unknown = typeof value === 'object' && value !== null ? Reflect.get(value, 'token') : value;
@@ -114,6 +123,7 @@ export class WidgetApp {
 
     /** Identity token dari website yang menunggu sesi siap (perintah `identify` sebelum/di tengah boot). */
     private pendingIdentity: string | null = null;
+    private pendingSignOut = false;
 
     private identifying = false;
 
@@ -359,8 +369,9 @@ export class WidgetApp {
                 }
                 break;
             case 'identify':
+                this.pendingSignOut = isSignedOut(first);
                 this.pendingIdentity = identityTokenOf(first);
-                void this.applyIdentity();
+                void (this.pendingSignOut ? this.applySignOut() : this.applyIdentity());
                 break;
             case 'track':
                 if (typeof first === 'string') {
@@ -442,6 +453,7 @@ export class WidgetApp {
                 this.proactive.start();
             }
             this.env.host.event('ready');
+            await this.applySignOut();
             await this.applyIdentity();
         } catch (error) {
             this.onStartError(error, referrer);
@@ -1326,7 +1338,27 @@ export class WidgetApp {
         // `identify` baru datang selama permintaan berjalan (mis. ganti akun cepat) → diterapkan berikutnya.
         if (this.hasPendingIdentity()) {
             void this.applyIdentity();
+        } else if (this.pendingSignOut) {
+            void this.applySignOut();
         }
+    }
+
+
+    /**
+     * Website menyatakan tak ada yang login (logout di halaman server-rendered: sesi di iframe masih tersimpan). Sesi
+     * yang terverifikasi LEWAT LOGIN WEBSITE diakhiri lalu diganti sesi anonim baru — pelanggan berikutnya di perangkat
+     * bersama tak melihat chat orang sebelumnya. Sesi anonim & verifikasi kode email tak terkait login → dibiarkan.
+     */
+    private async applySignOut(): Promise<void> {
+        if (!this.pendingSignOut || this.identifying || !this.session.current) {
+            return;
+        }
+        this.pendingSignOut = false;
+        if (this.session.current.verification_method !== 'identity_token') {
+            return;
+        }
+        await this.shutdown();
+        await this.start();
     }
 
 

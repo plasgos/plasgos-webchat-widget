@@ -62,7 +62,7 @@ export default tseslint.config(
         languageOptions: { sourceType: 'module', parserOptions: { ecmaFeatures: { jsx: true } } },
     },
     {
-        files: ['**/test/**/*.{ts,tsx}', 'e2e/**/*.ts', 'e2e-live/**/*.ts'],
+        files: ['**/test/**/*.{ts,tsx}', 'e2e/**/*.ts', 'e2e-live/**/*.ts', 'e2e-wordpress/**/*.ts'],
         rules: { '@typescript-eslint/explicit-function-return-type': 'off' },
     },
 );

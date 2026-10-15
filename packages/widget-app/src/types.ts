@@ -142,6 +142,8 @@ export interface Session {
     readonly refresh_token: string;
     readonly visitor_id: string;
     readonly trust_level: string;
+    /** Cara terverifikasi: `identity_token` (login website) / `otp_email`; null = belum (server lama: tak ada). */
+    readonly verification_method?: string | null;
     readonly conversation: { readonly id: string } | null;
     /** Formulir pre-chat sudah dikirim pengunjung ini (W4b). Server lama tak mengirimnya → dianggap belum. */
     readonly prechat_completed?: boolean;
