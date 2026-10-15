@@ -40,6 +40,9 @@ export interface ViewActions {
     readonly closeTranscript: () => void;
     readonly sendTranscript: (email: string | null) => void;
     readonly requestHandoff: () => void;
+    /** Pesan proaktif di atas launcher (W8b): diklik = buka chat; tutup = sembunyikan tanpa membuka. */
+    readonly openTeaser: () => void;
+    readonly dismissTeaser: () => void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -134,6 +137,17 @@ export class ChatView {
 
     private readonly badge: HTMLSpanElement;
 
+    /** Pesan proaktif di atas launcher (W8b). */
+    private readonly teaser: HTMLDivElement;
+
+    private readonly teaserBody: HTMLButtonElement;
+
+    private readonly teaserSender: HTMLSpanElement;
+
+    private readonly teaserText: HTMLSpanElement;
+
+    private readonly teaserClose: HTMLButtonElement;
+
     private readonly window: HTMLElement;
 
     private readonly title: HTMLHeadingElement;
@@ -193,6 +207,17 @@ export class ChatView {
         this.badge = this.element('span', 'pw-badge');
         this.badge.setAttribute('aria-hidden', 'true');
         this.launcher.appendChild(this.badge);
+        this.teaser = this.element('div', 'pw-teaser');
+        this.teaser.hidden = true;
+        this.teaserBody = this.element('button', 'pw-teaser-body');
+        this.teaserBody.type = 'button';
+        this.teaserSender = this.element('span', 'pw-teaser-sender');
+        this.teaserText = this.element('span', 'pw-teaser-text');
+        this.teaserBody.append(this.teaserSender, this.teaserText);
+        this.teaserClose = this.element('button', 'pw-teaser-close');
+        this.teaserClose.type = 'button';
+        this.teaserClose.appendChild(this.icon(ICONS.close, 14));
+        this.teaser.append(this.teaserBody, this.teaserClose);
 
         this.window = this.element('section', 'pw-window');
         this.window.setAttribute('role', 'dialog');
@@ -262,7 +287,7 @@ export class ChatView {
             header, this.notice, this.otpEntry, this.list, this.typingLine, this.captcha, this.prechat.element,
             this.otp.element, this.offline.element, this.transcript.element, this.handoffEntry, composer,
         );
-        this.root.append(this.launcher, this.window);
+        this.root.append(this.teaser, this.launcher, this.window);
 
         this.bind(composer, label);
     }
@@ -315,6 +340,14 @@ export class ChatView {
             : look.launcher_label ?? t('openChat'));
         this.badge.hidden = state.unread === 0;
         this.badge.textContent = state.unread > 99 ? '99+' : String(state.unread);
+        const teaser = state.open || layout.hideLauncher ? null : state.teaser;
+        this.teaser.hidden = teaser === null;
+        if (teaser) {
+            this.teaserSender.textContent = teaser.sender.name ?? look.team_title ?? t('defaultTitle');
+            this.teaserText.textContent = teaser.text;
+            this.teaserBody.setAttribute('aria-label', `${t('openChat')}: ${teaser.text}`);
+            this.teaserClose.setAttribute('aria-label', t('dismissTeaser'));
+        }
 
         this.window.hidden = !state.open;
         this.title.textContent = look.team_title ?? t('defaultTitle');
@@ -713,6 +746,13 @@ export class ChatView {
         this.launcher.addEventListener('click', () => {
             this.actions.interact();
             this.actions.toggle();
+        });
+        this.teaserBody.addEventListener('click', () => {
+            this.actions.interact();
+            this.actions.openTeaser();
+        });
+        this.teaserClose.addEventListener('click', () => {
+            this.actions.dismissTeaser();
         });
         this.closeButton.addEventListener('click', () => {
             this.actions.close();

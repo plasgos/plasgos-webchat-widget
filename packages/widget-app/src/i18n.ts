@@ -4,6 +4,7 @@ const DICTIONARY = {
     id: {
         openChat: 'Buka chat',
         closeChat: 'Tutup chat',
+        dismissTeaser: 'Tutup pesan',
         chatWindow: 'Jendela chat',
         defaultTitle: 'Chat',
         inputPlaceholder: 'Tulis pesan…',
@@ -112,6 +113,7 @@ const DICTIONARY = {
     en: {
         openChat: 'Open chat',
         closeChat: 'Close chat',
+        dismissTeaser: 'Dismiss message',
         chatWindow: 'Chat window',
         defaultTitle: 'Chat',
         inputPlaceholder: 'Write a message…',

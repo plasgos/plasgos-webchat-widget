@@ -80,6 +80,9 @@ let history: Record<string, unknown> | null = null;
 let aiEnabled: boolean | null = null;
 /** Pengaturan lampiran di konfigurasi (W7a); null = server lama. */
 let attachmentsConfig: Record<string, unknown> | null = null;
+/** Aturan proaktif di konfigurasi (W8b) & jawaban klaim berikutnya (antrean; kosong = tak tampil). */
+let proactiveRules: unknown[] | null = null;
+const proactiveReplies: unknown[] = [];
 /** Permintaan PUT ke penyimpanan (bukan API). */
 const uploads: { url: string; headers: Record<string, string>; size: number }[] = [];
 /** Jawaban `POST /sessions/identify` berikutnya (antrean; kosong = sukses verified). */
@@ -99,7 +102,7 @@ function route(url: string, init?: RequestInit): Response {
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
-        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(aiEnabled === null ? {} : { ai: { enabled: aiEnabled } }), ...(attachmentsConfig ? { attachments: attachmentsConfig } : {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(aiEnabled === null ? {} : { ai: { enabled: aiEnabled } }), ...(attachmentsConfig ? { attachments: attachmentsConfig } : {}), ...(proactiveRules ? { proactive: { rules: proactiveRules } } : {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
     }
     if (url.endsWith('/otp/request')) {
         return json(200, { sent: true, expires_in: 600 });
@@ -134,6 +137,9 @@ function route(url: string, init?: RequestInit): Response {
     if (url.endsWith('/attachments/presign')) {
         const payload = body as { mime: string; size: number };
         return json(201, { attachment_id: 'att_000000000000000000000001', upload: { url: 'https://storage.test/private/webchat/x.pdf?sig=1', method: 'PUT', headers: [{ name: 'Content-Type', value: payload.mime }, { name: 'Content-Length', value: String(payload.size) }], expires_at: '2026-10-15T10:05:00.000Z' }, max_bytes: 1048576 });
+    }
+    if (url.endsWith('/proactive')) {
+        return json(200, proactiveReplies.shift() ?? { shown: false, reason: 'frequency', message: null });
     }
     if (url.endsWith('/handoff')) {
         return json(200, { handoff: { active: true, already: false } });
@@ -181,6 +187,8 @@ describe('aplikasi widget (iframe)', () => {
         history = null;
         aiEnabled = null;
         attachmentsConfig = null;
+        proactiveRules = null;
+        proactiveReplies.length = 0;
         uploads.length = 0;
         identifyReplies.length = 0;
         socket.emitted.length = 0;
@@ -695,5 +703,85 @@ describe('aplikasi widget (iframe)', () => {
         expect(container.querySelector('.pw-notice')?.textContent).toBe('Sesi chat berakhir. Muat ulang halaman untuk mulai lagi.');
         expect((container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(true);
         expect(last(port.events)).toEqual({ name: 'error', data: { code: 'session_revoked' } });
+    });
+
+
+    describe('pesan proaktif (W8b)', () => {
+        const PROACTIVE = { id: 'wcp_0123456789abcdef0123456789abcdef', text: 'Bingung pilih paket? Kami bantu.', sender: { kind: 'system', name: 'Tim Toko' }, at: '2026-10-15T10:00:00.000Z' };
+        const claims = () => sent.filter((entry) => entry.url.endsWith('/proactive')).map((entry) => entry.body);
+
+        it('halaman dibuka → klaim aturan → kartu di atas launcher + lencana; diklik = jendela terbuka, pesan di daftar', async () => {
+            proactiveRules = [{ rule_id: 'prr_000000000001', trigger: { type: 'page_load' } }];
+            proactiveReplies.push({ shown: true, reason: null, message: PROACTIVE });
+            const { port, container } = await startApp();
+            await settle();
+
+            expect(claims()).toEqual([{ rule_id: 'prr_000000000001', page: { url: 'https://toko.com/produk', title: 'Produk' } }]);
+            expect(last(port.frames)).toMatchObject({ state: 'teaser' });
+            expect(last(port.states)).toMatchObject({ unread: 1 });
+            const teaser = container.querySelector<HTMLElement>('.pw-teaser');
+            expect(teaser?.hidden).toBe(false);
+            expect(teaser?.textContent).toContain('Bingung pilih paket?');
+            container.querySelector<HTMLButtonElement>('.pw-teaser-body')?.click();
+            await settle();
+            expect(last(port.frames)).toMatchObject({ state: 'open' });
+            expect(teaser?.hidden).toBe(true);
+            expect(container.querySelector('.pw-messages')?.textContent).toContain('Bingung pilih paket?');
+        });
+
+
+        it('tak tampil → diam; halaman baru (SPA) dinilai ulang; setelah tampil tak meminta lagi', async () => {
+            proactiveRules = [{ rule_id: 'prr_000000000001', trigger: { type: 'page_load' } }];
+            const { app, port } = await startApp();
+            await settle();
+            expect(claims()).toHaveLength(1);
+            expect(last(port.frames)).toMatchObject({ state: 'launcher' });
+
+            proactiveReplies.push({ shown: true, reason: null, message: PROACTIVE });
+            app.command({ name: 'page', args: [{ url: 'https://toko.com/harga', title: 'Harga' }] });
+            await settle();
+            expect(claims()).toHaveLength(2);
+            app.command({ name: 'page', args: [{ url: 'https://toko.com/kontak', title: 'Kontak' }] });
+            await settle();
+            expect(claims()).toHaveLength(2);
+        });
+
+
+        it('pemicu gulir & event track; tutup kartu tanpa membuka chat', async () => {
+            proactiveRules = [
+                { rule_id: 'prr_000000000002', trigger: { type: 'scroll_depth', percent: 50 } },
+                { rule_id: 'prr_000000000003', trigger: { type: 'event', event: 'add_to_cart' } },
+            ];
+            const { app, port, container } = await startApp();
+            app.activity({ scroll: 40 });
+            await settle();
+            expect(claims()).toHaveLength(0);
+            app.activity({ scroll: 50 });
+            await settle();
+            expect(claims().map((c) => (c as { rule_id: string }).rule_id)).toEqual(['prr_000000000002']);
+
+            proactiveReplies.push({ shown: true, reason: null, message: PROACTIVE });
+            app.command({ name: 'track', args: ['add_to_cart', { sku: 'K-1' }] });
+            await settle();
+            expect(last(port.frames)).toMatchObject({ state: 'teaser' });
+            container.querySelector<HTMLButtonElement>('.pw-teaser-close')?.click();
+            await settle();
+            expect(last(port.frames)).toMatchObject({ state: 'launcher' });
+        });
+
+
+        it('sapaan agen lewat socket → kartu tampil; pengunjung yang sudah bercakap tak meminta klaim', async () => {
+            const { port } = await startApp();
+            socket.serverEmit('proactive.message', { message: { ...PROACTIVE, sender: { kind: 'agent', name: 'Rina' } } });
+            await settle();
+            expect(last(port.frames)).toMatchObject({ state: 'teaser' });
+
+            history = { conversation: { id: 'conv-1', status: 'open' }, survey: null, messages: [] };
+            proactiveRules = [{ rule_id: 'prr_000000000001', trigger: { type: 'page_load' } }];
+            sent.length = 0;
+            await startApp();
+            await settle();
+            expect(claims()).toHaveLength(0);
+        });
     });
 });

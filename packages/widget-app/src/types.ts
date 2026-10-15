@@ -1,3 +1,5 @@
+import type { ProactiveRule } from './proactive';
+
 /** Bentuk data API publik `/webchat/v1` (api-crm `modules/webchat/http/public.*`) yang dipakai aplikasi widget. */
 
 export type Locale = 'id' | 'en';
@@ -81,12 +83,33 @@ export interface Availability {
     readonly reply_estimate_minutes: number | null;
 }
 
+/** Aturan pesan proaktif di konfigurasi publik (W8b): hanya pemicu — teks & syarat tetap di server. */
+export interface ProactiveSettings {
+    readonly rules: readonly ProactiveRule[];
+}
+
+/** Pesan proaktif yang boleh tampil (klaim aturan atau sapaan agen). `id` = id pesan di percakapan nanti. */
+export interface ProactiveMessage {
+    readonly id: string;
+    readonly text: string;
+    readonly sender: { readonly kind: 'system' | 'agent'; readonly name: string | null };
+    readonly at: string | null;
+}
+
+export interface ProactiveClaim {
+    readonly shown: boolean;
+    readonly reason: string | null;
+    readonly message: ProactiveMessage | null;
+}
+
 export interface WidgetConfig {
     readonly widget_id: string;
     readonly appearance: Appearance;
     readonly identity?: IdentitySettings;
     readonly prechat?: PrechatSettings;
     readonly privacy?: PrivacySettings;
+    /** Pesan proaktif (W8b); server lama tak mengirimnya = tanpa aturan. */
+    readonly proactive?: ProactiveSettings;
     /** Status tim saat konfigurasi dibaca (W5a); perubahan berikutnya lewat socket `team.presence`. */
     readonly team?: { readonly online: boolean | null } | null;
     readonly offline?: OfflineSettings;

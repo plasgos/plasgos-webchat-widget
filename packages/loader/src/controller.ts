@@ -77,6 +77,26 @@ export class WebchatController {
 
     private stopNavigation: (() => void) | null = null;
 
+    /** Kedalaman gulir tertinggi (kelipatan 10 %) yang sudah dilaporkan untuk halaman ini — pemicu proaktif (W8b). */
+    private scrolled = 0;
+
+    private readonly onScroll = (): void => {
+        const { window: win, document: doc } = this.env;
+        const max = doc.documentElement.scrollHeight - win.innerHeight;
+        const bucket = max > 0 ? Math.min(100, Math.floor(win.scrollY * 10 / max) * 10) : 100;
+        if (bucket > this.scrolled && this.ready) {
+            this.scrolled = bucket;
+            this.post(createMessage('host.activity', { scroll: bucket }));
+        }
+    };
+
+    /** Niat keluar (desktop): kursor meninggalkan halaman lewat tepi atas. */
+    private readonly onMouseOut = (event: MouseEvent): void => {
+        if (!event.relatedTarget && event.clientY <= 0 && this.ready) {
+            this.post(createMessage('host.activity', { exit: true }));
+        }
+    };
+
     private focusBeforeOpen: HTMLElement | null = null;
 
     private viewportTimer: ReturnType<typeof setTimeout> | null = null;
@@ -202,10 +222,13 @@ export class WebchatController {
         });
         win.addEventListener('message', this.onMessage);
         win.addEventListener('resize', this.onResize);
+        win.addEventListener('scroll', this.onScroll, { passive: true });
+        doc.addEventListener('mouseout', this.onMouseOut);
         this.frame.attach();
         this.armReadyTimeout();
         if (boot.loader.autoPageTracking) {
             this.stopNavigation = watchNavigation(win, () => {
+                this.scrolled = 0;
                 this.command('page', [this.currentPage()]);
             });
         }
@@ -390,6 +413,8 @@ export class WebchatController {
         this.stopNavigation = null;
         this.env.window.removeEventListener('message', this.onMessage);
         this.env.window.removeEventListener('resize', this.onResize);
+        this.env.window.removeEventListener('scroll', this.onScroll);
+        this.env.document.removeEventListener('mouseout', this.onMouseOut);
         if (this.viewportTimer !== null) {
             clearTimeout(this.viewportTimer);
             this.viewportTimer = null;

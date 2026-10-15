@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 
-import type { ChatMessage, ConversationStatus, CustomerSurvey } from './types';
+import type { ChatMessage, ConversationStatus, CustomerSurvey, ProactiveMessage } from './types';
 
 /** Event server → widget di namespace `/webchat` (api-crm WEBCHAT_DESIGN.md §8). */
 export interface ServerEvents {
@@ -25,6 +25,8 @@ export interface ServerEvents {
     'csat.updated': (payload: { conversation_id: string; survey: CustomerSurvey | null }) => void;
     /** Percakapan diteruskan ke tim — dari tombol pengunjung atau batas AI tercapai (W6c). */
     'conversation.handoff': (payload: { conversation_id: string; active: boolean; reason: string; at: string }) => void;
+    /** Agen menyapa pengunjung yang sedang di website (pesan proaktif manual, W8b). */
+    'proactive.message': (payload: { message: ProactiveMessage }) => void;
 }
 
 /** Event widget → server; balasan lewat ack. */
@@ -103,7 +105,7 @@ export class Realtime {
         });
         const events = [
             'message.created', 'message.status', 'typing', 'session.refresh_required', 'session.revoked', 'team.presence',
-            'conversation.state', 'csat.updated', 'conversation.handoff',
+            'conversation.state', 'csat.updated', 'conversation.handoff', 'proactive.message',
         ] as const;
         for (const name of events) {
             socket.on(name, ((payload: never) => {

@@ -46,6 +46,9 @@ function boot(win: Window, doc: Document, widgetId: string): void {
         onViewport: (payload) => {
             app?.setViewport(payload);
         },
+        onActivity: (payload) => {
+            app?.activity(payload);
+        },
     });
     app = new WidgetApp({ window: win, document: doc, container, widgetId, host: bridge });
     bridge.start();

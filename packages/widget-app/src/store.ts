@@ -1,4 +1,6 @@
-import type { AvailabilityStatus, ChatMessage, ConversationStatus, CustomerSurvey, Locale, WidgetConfig } from './types';
+import type {
+    AvailabilityStatus, ChatMessage, ConversationStatus, CustomerSurvey, Locale, ProactiveMessage, WidgetConfig,
+} from './types';
 
 /** Urutan status pesan; status TAK PERNAH mundur (read tak diturunkan delivered yang datang terlambat). */
 const STATUS_RANK: Readonly<Record<string, number>> = {
@@ -65,6 +67,8 @@ export interface AppState {
     /** Percakapan sudah diteruskan ke tim (W6c) — tombol "Bicara dengan tim" disembunyikan. */
     readonly handoffActive: boolean;
     readonly handoffBusy: boolean;
+    /** Pesan proaktif yang sedang ditawarkan di atas launcher (W8b), atau null. */
+    readonly teaser: ProactiveMessage | null;
 }
 
 export interface TranscriptState {
@@ -113,6 +117,7 @@ export const INITIAL_STATE: AppState = {
     transcript: null,
     handoffActive: false,
     handoffBusy: false,
+    teaser: null,
 };
 
 /**

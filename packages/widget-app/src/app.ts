@@ -15,8 +15,9 @@ import { applyInboundStatus, availabilityOf, INITIAL_STATE, lastServerTimestamp,
 import type { AppState } from './store';
 import { createTabChannel } from './tabs';
 import { PageTracker } from './tracking';
+import { ProactiveEngine } from './proactive';
 import type { TabChannel } from './tabs';
-import type { ChatMessage, Locale, PageInfo, Session, WidgetConfig } from './types';
+import type { ChatMessage, Locale, PageInfo, ProactiveMessage, Session, WidgetConfig } from './types';
 import type { OfflineValues } from './ui/offline';
 import type { PrechatValues } from './ui/prechat';
 import { ChatView } from './ui/view';
@@ -96,6 +97,9 @@ export class WidgetApp {
     /** Jejak halaman & event website (W8a) — patuh persetujuan cookie & pengaturan tenant. */
     private readonly tracker: PageTracker;
 
+    /** Pemicu pesan proaktif (W8b): widget menilai kapan, server memutuskan boleh. */
+    private readonly proactive: ProactiveEngine;
+
     private readonly view: ChatView;
 
     private readonly sound: NotificationSound;
@@ -174,6 +178,7 @@ export class WidgetApp {
         win.addEventListener('pagehide', () => {
             this.tracker.flushNow(true);
         });
+        this.proactive = new ProactiveEngine({ claim: (ruleId) => this.claimProactive(ruleId) });
         this.realtime = new Realtime(win.location.origin, () => this.session.token, {
             onEvent: (name, payload) => {
                 this.onServerEvent(name, payload);
@@ -273,6 +278,12 @@ export class WidgetApp {
             requestHandoff: () => {
                 void this.requestHandoff();
             },
+            openTeaser: () => {
+                this.setOpen(true);
+            },
+            dismissTeaser: () => {
+                this.store.update({ teaser: null });
+            },
         });
         this.view.mount(env.container);
         this.store.subscribe((state) => {
@@ -336,6 +347,7 @@ export class WidgetApp {
                 if (page) {
                     this.page = page;
                     this.tracker.pageView(page);
+                    this.proactive.page();
                 }
                 break;
             }
@@ -349,6 +361,9 @@ export class WidgetApp {
                 void this.applyIdentity();
                 break;
             case 'track':
+                if (typeof first === 'string') {
+                    this.proactive.event(first);
+                }
                 if (!this.tracker.track(first, payload.args[1])) {
                     this.env.host.event('error', { code: 'invalid_track', message: 'Nama event: huruf, angka, _ . : - (maks. 64); properti datar maks. 20' });
                 }
@@ -360,6 +375,17 @@ export class WidgetApp {
                 }
                 break;
             }
+        }
+    }
+
+
+    /** Sinyal halaman dari loader (W8b): kedalaman gulir & niat keluar → pemicu proaktif. */
+    public activity(payload: { readonly scroll?: number; readonly exit?: boolean }): void {
+        if (typeof payload.scroll === 'number') {
+            this.proactive.scroll(payload.scroll);
+        }
+        if (payload.exit === true) {
+            this.proactive.exitIntent();
         }
     }
 
@@ -409,6 +435,10 @@ export class WidgetApp {
             // diterima (antre) saat halaman dimuat ulang.
             await this.syncHistory();
             this.realtime.connect();
+            // Pesan proaktif hanya untuk pengunjung yang belum bercakap (server memeriksa ulang).
+            if (!this.store.get().conversationId) {
+                this.proactive.start();
+            }
             this.env.host.event('ready');
             await this.applyIdentity();
         } catch (error) {
@@ -458,6 +488,7 @@ export class WidgetApp {
     private fatal(code: string): void {
         this.realtime.disconnect();
         this.tracker.setReady(false);
+        this.proactive.stop();
         this.store.update({ notice: { code, fatal: true }, connection: 'idle' });
         this.env.host.event('error', { code });
     }
@@ -468,6 +499,7 @@ export class WidgetApp {
     /** Konfigurasi baru → status tim, jam kerja, estimasi balas; penyegaran berikutnya dijadwalkan. */
     private applyConfig(config: WidgetConfig): void {
         this.tracker.setEnabled(config.privacy?.page_tracking !== false);
+        this.proactive.setRules(config.proactive?.rules ?? []);
         this.store.update({
             config,
             teamOnline: config.team?.online ?? null,
@@ -583,7 +615,8 @@ export class WidgetApp {
             status: 'pending',
             timestamp: new Date().toISOString(),
         };
-        this.store.update((state) => ({ messages: upsertMessages(state.messages, [message]) }));
+        this.store.update((state) => ({ messages: upsertMessages(state.messages, [message]), teaser: null }));
+        this.proactive.stop();
         void this.flushOutbox();
     }
 
@@ -821,6 +854,9 @@ export class WidgetApp {
             case 'conversation.handoff':
                 this.store.update({ handoffActive: (payload as Payload<'conversation.handoff'>).active });
                 break;
+            case 'proactive.message':
+                this.showProactive((payload as Payload<'proactive.message'>).message);
+                break;
             case 'csat.updated':
                 this.store.update({ survey: (payload as Payload<'csat.updated'>).survey, surveyError: null });
                 break;
@@ -846,6 +882,51 @@ export class WidgetApp {
         }
         this.store.update((state) => ({ unread: state.unread + 1 }));
         if (this.store.get().soundEnabled) {
+            this.sound.play();
+        }
+        this.env.host.event('message', { sender: message.sender, text: message.text, timestamp: message.timestamp });
+    }
+
+
+    /* ── pesan proaktif (W8b) ── */
+
+    /** Pemicu terpenuhi → minta server. `true` = tampil (mesin berhenti). Yang sudah bercakap tak meminta. */
+    private async claimProactive(ruleId: string): Promise<boolean> {
+        if (this.store.get().conversationId || !this.session.current) {
+            return false;
+        }
+        const page = { url: this.page.url.slice(0, 2000), title: this.page.title.slice(0, 300) };
+        const result = await this.session.withToken((token) => this.api.claimProactive(token, ruleId, page));
+        if (!result.shown || !result.message) {
+            return false;
+        }
+        this.showProactive(result.message);
+        return true;
+    }
+
+
+    /**
+     * Tampilkan pesan proaktif: masuk daftar pesan (id = id pesan di percakapan nanti → tak tampil ganda saat riwayat
+     * server memuatnya) dan, bila jendela tertutup, sebagai kartu di atas launcher + lencana belum dibaca.
+     */
+    private showProactive(proactive: ProactiveMessage): void {
+        const message: ChatMessage = {
+            id: proactive.id,
+            client_message_id: null,
+            direction: 'outbound',
+            sender: { kind: proactive.sender.kind, name: proactive.sender.name },
+            type: 'text',
+            text: proactive.text,
+            status: 'read',
+            timestamp: proactive.at ?? new Date().toISOString(),
+        };
+        const open = this.store.get().open;
+        this.store.update((state) => ({
+            messages: upsertMessages(state.messages, [message]),
+            ...(open ? {} : { teaser: proactive, unread: state.unread + 1 }),
+        }));
+        this.proactive.stop();
+        if (!open && this.store.get().soundEnabled) {
             this.sound.play();
         }
         this.env.host.event('message', { sender: message.sender, text: message.text, timestamp: message.timestamp });
@@ -1016,7 +1097,7 @@ export class WidgetApp {
         if (state.open === open) {
             return;
         }
-        this.store.update({ open });
+        this.store.update(open ? { open, teaser: null } : { open });
         this.env.host.event(open ? 'open' : 'close');
         if (!open) {
             return;
@@ -1253,6 +1334,7 @@ export class WidgetApp {
         // Jejak yang tertunda milik pengunjung yang keluar — dikirim dulu, lalu pelacak berhenti sampai sesi baru.
         this.tracker.flushNow(false);
         this.tracker.setReady(false);
+        this.proactive.stop();
         await this.session.shutdown();
         this.store.update({
             messages: [], unread: 0, conversationId: null, trustLevel: null, open: false, prechatPending: false,
@@ -1280,7 +1362,8 @@ export class WidgetApp {
         const hiddenBySettings = state.config?.appearance.hide_launcher === true;
         const launcherHidden = this.hideLauncher || hiddenBySettings || state.config === null || stopped
             || this.hiddenWhileOffline(state);
-        const layout = frameLayout(state.open, state.config?.appearance ?? {}, this.viewport, launcherHidden);
+        const teaser = state.teaser !== null;
+        const layout = frameLayout(state.open, state.config?.appearance ?? {}, this.viewport, launcherHidden, teaser);
         this.view.render(state, { fullscreen: this.viewport.width < MOBILE_BREAKPOINT, hideLauncher: layout.state === 'hidden' });
         const layoutKey = JSON.stringify(layout);
         if (layoutKey !== this.lastLayout) {

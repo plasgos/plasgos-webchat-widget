@@ -105,6 +105,32 @@ describe('controller loader', () => {
     });
 
 
+    it('sinyal pesan proaktif (W8b): gulir kelipatan 10 % sekali per tingkat, niat keluar lewat tepi atas', () => {
+        const webchat = controller();
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager' }]);
+        vi.advanceTimersByTime(10);
+        const posted = vi.spyOn(iframes()[0]?.contentWindow as Window, 'postMessage').mockImplementation(() => undefined);
+        fromWidget(createMessage('widget.ready', {}));
+        Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 2000 });
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1000 });
+        const scrollTo = (y: number): void => {
+            Object.defineProperty(window, 'scrollY', { configurable: true, value: y });
+            window.dispatchEvent(new Event('scroll'));
+        };
+
+        scrollTo(550);
+        scrollTo(560);
+        scrollTo(1000);
+        scrollTo(200);
+        document.dispatchEvent(new MouseEvent('mouseout', { clientY: 300 }));
+        document.dispatchEvent(new MouseEvent('mouseout', { clientY: 0 }));
+
+        type Posted = { type: string; payload: Record<string, unknown> };
+        const activity = posted.mock.calls.map(([message]) => message as Posted).filter((message) => message.type === 'host.activity');
+        expect(activity.map((message) => message.payload)).toEqual([{ scroll: 50 }, { scroll: 100 }, { exit: true }]);
+    });
+
+
     it('boot dengan identityToken (halaman server-rendered) = boot + identify; token TIDAK ikut opsi host.init', () => {
         const webchat = controller();
         webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager', identityToken: 'jwt-pelanggan' }]);

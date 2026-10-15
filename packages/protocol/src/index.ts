@@ -43,7 +43,7 @@ export const WIDGET_EVENTS = [
 export type WidgetEventName = (typeof WIDGET_EVENTS)[number];
 
 /** Keadaan tampilan iframe yang diminta aplikasi widget; loader yang mengatur ukuran & posisi elemen iframe. */
-export const FRAME_STATES = ['hidden', 'launcher', 'open'] as const;
+export const FRAME_STATES = ['hidden', 'launcher', 'teaser', 'open'] as const;
 
 export type FrameState = (typeof FRAME_STATES)[number];
 
@@ -82,6 +82,8 @@ export interface HostMessages {
     'host.init': { readonly options: BootOptions; readonly page: PageInfo; readonly hostOrigin: string };
     'host.command': { readonly name: HostCommand; readonly args: readonly unknown[] };
     'host.viewport': { readonly width: number; readonly height: number };
+    /** Sinyal halaman untuk pemicu pesan proaktif (W8b): kedalaman gulir (kelipatan 10 %) & niat keluar (desktop). */
+    'host.activity': { readonly scroll?: number; readonly exit?: boolean };
 }
 
 /** Pesan iframe → halaman tenant. */
@@ -103,7 +105,7 @@ export interface ProtocolMessage<T extends MessageType = MessageType> {
     readonly payload: AllMessages[T];
 }
 
-const HOST_MESSAGE_TYPES: readonly HostMessageType[] = ['host.init', 'host.command', 'host.viewport'];
+const HOST_MESSAGE_TYPES: readonly HostMessageType[] = ['host.init', 'host.command', 'host.viewport', 'host.activity'];
 const WIDGET_MESSAGE_TYPES: readonly WidgetMessageType[] = ['widget.ready', 'widget.frame', 'widget.event', 'widget.state'];
 
 export function createMessage<T extends MessageType>(type: T, payload: AllMessages[T]): ProtocolMessage<T> {

@@ -1,6 +1,6 @@
 import type {
     ConversationPage, CustomerSurvey, OfflineMessageResult, OtpRequestResult, PageInfo, PrechatResult, SendResult,
-    EventsResult, HandoffResult, PresignResult, Session, TranscriptResult, WidgetConfig,
+    EventsResult, HandoffResult, ProactiveClaim, PresignResult, Session, TranscriptResult, WidgetConfig,
 } from './types';
 import type { TrackingEvent } from './tracking';
 
@@ -184,6 +184,12 @@ export class PublicApi {
         options: { keepalive?: boolean } = {},
     ): Promise<EventsResult> {
         return this.request('POST', '/events', { token, body: { events }, keepalive: options.keepalive === true });
+    }
+
+
+    /** Pemicu aturan proaktif terpenuhi (W8b) → server memutuskan tampil atau tidak (`shown`, `reason`). */
+    public claimProactive(token: string, ruleId: string, page: PageInfo): Promise<ProactiveClaim> {
+        return this.request('POST', '/proactive', { token, body: { rule_id: ruleId, page } });
     }
 
 

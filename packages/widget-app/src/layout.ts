@@ -7,6 +7,9 @@ export const MOBILE_BREAKPOINT = 640;
 /** Launcher 56 px + ruang bayangan & badge. */
 export const LAUNCHER_FRAME = 88;
 export const WINDOW_WIDTH = 380;
+/** Pesan proaktif di atas launcher (W8b): kartu ±300 px + launcher. */
+export const TEASER_WIDTH = 320;
+export const TEASER_HEIGHT = 200;
 export const WINDOW_MAX_HEIGHT = 640;
 const WINDOW_MARGIN = 100;
 
@@ -21,6 +24,7 @@ export function frameLayout(
     appearance: Appearance,
     viewport: Viewport,
     hideLauncher: boolean,
+    teaser = false,
 ): FrameLayout {
     const position = appearance.position === 'left' ? 'left' : 'right';
     const offsetX = appearance.offset?.x ?? 20;
@@ -29,9 +33,15 @@ export function frameLayout(
     const base = { position, offsetX, offsetY, zIndex } as const;
 
     if (!open) {
-        return hideLauncher
-            ? { ...base, state: 'hidden', width: 0, height: 0, fullscreen: false }
-            : { ...base, state: 'launcher', width: LAUNCHER_FRAME, height: LAUNCHER_FRAME, fullscreen: false };
+        if (hideLauncher) {
+            return { ...base, state: 'hidden', width: 0, height: 0, fullscreen: false };
+        }
+        // Pesan proaktif tampil di atas launcher; di layar sempit lebarnya menyesuaikan (sisakan tepi 16 px).
+        if (!teaser) {
+            return { ...base, state: 'launcher', width: LAUNCHER_FRAME, height: LAUNCHER_FRAME, fullscreen: false };
+        }
+        const width = Math.min(TEASER_WIDTH, Math.max(LAUNCHER_FRAME, viewport.width - offsetX - 16));
+        return { ...base, state: 'teaser', width, height: TEASER_HEIGHT, fullscreen: false };
     }
 
     const fullscreen = viewport.width < MOBILE_BREAKPOINT;

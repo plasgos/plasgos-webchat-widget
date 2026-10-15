@@ -5,6 +5,8 @@ export interface BridgeHandlers {
     readonly onInit: (payload: HostMessages['host.init']) => void;
     readonly onCommand: (payload: HostMessages['host.command']) => void;
     readonly onViewport: (payload: HostMessages['host.viewport']) => void;
+    /** Sinyal halaman untuk pemicu proaktif (W8b); loader lama tak mengirimnya. */
+    readonly onActivity?: (payload: HostMessages['host.activity']) => void;
 }
 
 /**
@@ -45,6 +47,9 @@ export class HostBridge {
                 break;
             case 'host.viewport':
                 this.handlers.onViewport(message.payload as HostMessages['host.viewport']);
+                break;
+            case 'host.activity':
+                this.handlers.onActivity?.(message.payload as HostMessages['host.activity']);
                 break;
         }
     };
