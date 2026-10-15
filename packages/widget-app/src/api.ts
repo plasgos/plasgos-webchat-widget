@@ -1,7 +1,8 @@
 import type {
     ConversationPage, CustomerSurvey, OfflineMessageResult, OtpRequestResult, PageInfo, PrechatResult, SendResult,
-    HandoffResult, PresignResult, Session, TranscriptResult, WidgetConfig,
+    EventsResult, HandoffResult, PresignResult, Session, TranscriptResult, WidgetConfig,
 } from './types';
+import type { TrackingEvent } from './tracking';
 
 /**
  * Galat API publik dengan kode stabil (`error_code` server) — teks untuk pengunjung dipilih dari kode, bukan dari
@@ -176,6 +177,16 @@ export class PublicApi {
     }
 
 
+    /** Jejak halaman & event website (W8a); `keepalive` saat halaman ditutup agar kiriman terakhir tak terputus. */
+    public events(
+        token: string,
+        events: readonly TrackingEvent[],
+        options: { keepalive?: boolean } = {},
+    ): Promise<EventsResult> {
+        return this.request('POST', '/events', { token, body: { events }, keepalive: options.keepalive === true });
+    }
+
+
     public conversation(token: string): Promise<ConversationPage> {
         return this.request('GET', '/conversation', { token });
     }
@@ -199,7 +210,7 @@ export class PublicApi {
     private async request<T>(
         method: string,
         path: string,
-        options: { token?: string; body?: unknown } = {},
+        options: { token?: string; body?: unknown; keepalive?: boolean } = {},
     ): Promise<T> {
         let response: Response;
         try {
@@ -211,6 +222,7 @@ export class PublicApi {
                 },
                 ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
                 credentials: 'omit',
+                ...(options.keepalive ? { keepalive: true } : {}),
             });
         } catch (error) {
             throw new ApiError(0, 'network', error instanceof Error ? error.message : 'network error');

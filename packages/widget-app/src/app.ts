@@ -14,6 +14,7 @@ import type { KeyValueStore } from './storage';
 import { applyInboundStatus, availabilityOf, INITIAL_STATE, lastServerTimestamp, Store, upsertMessages } from './store';
 import type { AppState } from './store';
 import { createTabChannel } from './tabs';
+import { PageTracker } from './tracking';
 import type { TabChannel } from './tabs';
 import type { ChatMessage, Locale, PageInfo, Session, WidgetConfig } from './types';
 import type { OfflineValues } from './ui/offline';
@@ -92,6 +93,9 @@ export class WidgetApp {
 
     private readonly realtime: Realtime;
 
+    /** Jejak halaman & event website (W8a) — patuh persetujuan cookie & pengaturan tenant. */
+    private readonly tracker: PageTracker;
+
     private readonly view: ChatView;
 
     private readonly sound: NotificationSound;
@@ -143,6 +147,8 @@ export class WidgetApp {
 
     private configTimer: ReturnType<typeof setTimeout> | null = null;
 
+    private referrer = '';
+
 
     public constructor(private readonly env: AppEnvironment) {
         const win = env.window;
@@ -159,6 +165,14 @@ export class WidgetApp {
             tabs: this.tabs,
             locks,
             now: () => Date.now(),
+        });
+        this.tracker = new PageTracker({
+            send: (events, { keepalive }) => this.session.withToken(
+                (token) => this.api.events(token, events, { keepalive }),
+            ),
+        });
+        win.addEventListener('pagehide', () => {
+            this.tracker.flushNow(true);
         });
         this.realtime = new Realtime(win.location.origin, () => this.session.token, {
             onEvent: (name, payload) => {
@@ -269,6 +283,9 @@ export class WidgetApp {
         });
         env.document.addEventListener('visibilitychange', () => {
             this.store.update({ visible: env.document.visibilityState === 'visible' });
+            if (env.document.visibilityState === 'hidden') {
+                this.tracker.flushNow(true);
+            }
             if (this.isReading()) {
                 this.markRead();
             }
@@ -291,6 +308,10 @@ export class WidgetApp {
             visible: this.env.document.visibilityState === 'visible',
         });
         this.preferredLocale = payload.options.locale;
+        if (payload.options.consentRequired === true) {
+            this.tracker.requireConsent();
+        }
+        this.referrer = payload.page.referrer;
         void this.start(payload.page.referrer);
     }
 
@@ -310,9 +331,14 @@ export class WidgetApp {
             case 'shutdown':
                 void this.shutdown();
                 break;
-            case 'page':
-                this.page = pageOf(first) ?? this.page;
+            case 'page': {
+                const page = pageOf(first);
+                if (page) {
+                    this.page = page;
+                    this.tracker.pageView(page);
+                }
                 break;
+            }
             case 'setLocale':
                 if (first === 'id' || first === 'en') {
                     this.store.update({ locale: first });
@@ -323,8 +349,17 @@ export class WidgetApp {
                 void this.applyIdentity();
                 break;
             case 'track':
-            case 'consent':
+                if (!this.tracker.track(first, payload.args[1])) {
+                    this.env.host.event('error', { code: 'invalid_track', message: 'Nama event: huruf, angka, _ . : - (maks. 64); properti datar maks. 20' });
+                }
                 break;
+            case 'consent': {
+                const analytics = consentOf(first);
+                if (analytics !== null) {
+                    this.tracker.setConsent(analytics);
+                }
+                break;
+            }
         }
     }
 
@@ -358,6 +393,9 @@ export class WidgetApp {
                 locale: this.store.get().locale,
                 ...(captchaToken ? { captcha_token: captchaToken } : {}),
             });
+            // Halaman pendaratan = jejak pertama kunjungan; navigasi berikutnya lewat perintah `page` (loader).
+            this.tracker.pageView({ ...this.page, referrer: this.referrer });
+            this.tracker.setReady(true);
             this.store.update({
                 trustLevel: session.trust_level,
                 conversationId: session.conversation?.id ?? null,
@@ -419,6 +457,7 @@ export class WidgetApp {
 
     private fatal(code: string): void {
         this.realtime.disconnect();
+        this.tracker.setReady(false);
         this.store.update({ notice: { code, fatal: true }, connection: 'idle' });
         this.env.host.event('error', { code });
     }
@@ -428,6 +467,7 @@ export class WidgetApp {
 
     /** Konfigurasi baru → status tim, jam kerja, estimasi balas; penyegaran berikutnya dijadwalkan. */
     private applyConfig(config: WidgetConfig): void {
+        this.tracker.setEnabled(config.privacy?.page_tracking !== false);
         this.store.update({
             config,
             teamOnline: config.team?.online ?? null,
@@ -1210,6 +1250,9 @@ export class WidgetApp {
 
     private async shutdown(): Promise<void> {
         this.realtime.disconnect();
+        // Jejak yang tertunda milik pengunjung yang keluar — dikirim dulu, lalu pelacak berhenti sampai sesi baru.
+        this.tracker.flushNow(false);
+        this.tracker.setReady(false);
         await this.session.shutdown();
         this.store.update({
             messages: [], unread: 0, conversationId: null, trustLevel: null, open: false, prechatPending: false,
@@ -1275,6 +1318,17 @@ function lockManagerOf(navigator: Navigator): Locks | null {
     }
     const manager = locks as LockManager;
     return { request: (name, callback) => manager.request(name, callback) };
+}
+
+/** `Plasgos('consent', { analytics })` (bentuk resmi) atau `Plasgos('consent', true|false)`; lainnya diabaikan. */
+function consentOf(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (typeof value === 'object' && value !== null && typeof (value as Record<string, unknown>)['analytics'] === 'boolean') {
+        return (value as Record<string, boolean>)['analytics'] ?? null;
+    }
+    return null;
 }
 
 function pageOf(value: unknown): PageInfo | null {

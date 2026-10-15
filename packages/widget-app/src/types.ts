@@ -35,6 +35,16 @@ export interface PrechatSettings {
 export interface PrivacySettings {
     readonly consent_text: string | null;
     readonly consent_version: string | null;
+    /** Tenant mematikan jejak halaman (W8a) → widget tak mengirim event. Server lama tak mengirimnya = menyala. */
+    readonly page_tracking?: boolean;
+}
+
+/** Jawaban `POST /events` (W8a). `dropped` = dibuang (domain asing, kuota harian, pelacakan mati). */
+export interface EventsResult {
+    readonly accepted: number;
+    readonly stored: number;
+    readonly dropped: number;
+    readonly tracking: boolean;
 }
 
 /** `required` = pengunjung wajib terverifikasi (identity token dari website) sebelum bisa mengirim pesan. */
