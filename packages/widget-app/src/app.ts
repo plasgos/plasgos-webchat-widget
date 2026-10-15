@@ -153,6 +153,8 @@ export class WidgetApp {
 
     private referrer = '';
 
+    private whatsappPending = false;
+
 
     public constructor(private readonly env: AppEnvironment) {
         const win = env.window;
@@ -857,6 +859,9 @@ export class WidgetApp {
             case 'proactive.message':
                 this.showProactive((payload as Payload<'proactive.message'>).message);
                 break;
+            case 'whatsapp.linked':
+                this.store.update({ whatsappLinked: (payload as Payload<'whatsapp.linked'>).phone_masked ?? '' });
+                break;
             case 'csat.updated':
                 this.store.update({ survey: (payload as Payload<'csat.updated'>).survey, surveyError: null });
                 break;
@@ -885,6 +890,26 @@ export class WidgetApp {
             this.sound.play();
         }
         this.env.host.event('message', { sender: message.sender, text: message.text, timestamp: message.timestamp });
+    }
+
+
+    /* ── lanjutkan di WhatsApp (W8d) ── */
+
+    /** Tautan `wa.me` berkode disiapkan saat jendela dibuka (sekali per sesi); gagal = tombol tak tampil. */
+    private async prepareWhatsApp(): Promise<void> {
+        const state = this.store.get();
+        if (!state.config?.whatsapp?.enabled || state.whatsappUrl || this.whatsappPending || !this.session.current) {
+            return;
+        }
+        this.whatsappPending = true;
+        try {
+            const link = await this.session.withToken((token) => this.api.whatsappLink(token));
+            this.store.update({ whatsappUrl: link.url });
+        } catch {
+            // Tombol tak tampil; chat tetap berjalan.
+        } finally {
+            this.whatsappPending = false;
+        }
     }
 
 
@@ -1101,6 +1126,7 @@ export class WidgetApp {
         this.env.host.event(open ? 'open' : 'close');
         if (open) {
             this.tracker.widgetOpened();
+            void this.prepareWhatsApp();
         }
         if (!open) {
             return;

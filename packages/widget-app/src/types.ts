@@ -96,6 +96,13 @@ export interface ProactiveMessage {
     readonly at: string | null;
 }
 
+/** Tautan `wa.me` berkode untuk melanjutkan percakapan di WhatsApp (W8d). */
+export interface WhatsAppLink {
+    readonly url: string;
+    readonly code: string;
+    readonly expires_at: string;
+}
+
 export interface ProactiveClaim {
     readonly shown: boolean;
     readonly reason: string | null;
@@ -108,6 +115,8 @@ export interface WidgetConfig {
     readonly identity?: IdentitySettings;
     readonly prechat?: PrechatSettings;
     readonly privacy?: PrivacySettings;
+    /** "Lanjutkan di WhatsApp" (W8d); server lama tak mengirimnya = mati. */
+    readonly whatsapp?: { readonly enabled: boolean };
     /** Pesan proaktif (W8b); server lama tak mengirimnya = tanpa aturan. */
     readonly proactive?: ProactiveSettings;
     /** Status tim saat konfigurasi dibaca (W5a); perubahan berikutnya lewat socket `team.presence`. */

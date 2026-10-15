@@ -69,6 +69,10 @@ export interface AppState {
     readonly handoffBusy: boolean;
     /** Pesan proaktif yang sedang ditawarkan di atas launcher (W8b), atau null. */
     readonly teaser: ProactiveMessage | null;
+    /** Tautan "Lanjutkan di WhatsApp" (W8d) — disiapkan saat jendela dibuka, atau null. */
+    readonly whatsappUrl: string | null;
+    /** Nomor WhatsApp (disamarkan) yang sudah tersambung ke percakapan ini, atau null. */
+    readonly whatsappLinked: string | null;
 }
 
 export interface TranscriptState {
@@ -118,6 +122,8 @@ export const INITIAL_STATE: AppState = {
     handoffActive: false,
     handoffBusy: false,
     teaser: null,
+    whatsappUrl: null,
+    whatsappLinked: null,
 };
 
 /**

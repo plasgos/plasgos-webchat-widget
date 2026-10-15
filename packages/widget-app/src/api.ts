@@ -1,6 +1,6 @@
 import type {
     ConversationPage, CustomerSurvey, OfflineMessageResult, OtpRequestResult, PageInfo, PrechatResult, SendResult,
-    EventsResult, HandoffResult, ProactiveClaim, PresignResult, Session, TranscriptResult, WidgetConfig,
+    EventsResult, HandoffResult, ProactiveClaim, WhatsAppLink, PresignResult, Session, TranscriptResult, WidgetConfig,
 } from './types';
 import type { TrackingEvent } from './tracking';
 
@@ -184,6 +184,12 @@ export class PublicApi {
         options: { keepalive?: boolean } = {},
     ): Promise<EventsResult> {
         return this.request('POST', '/events', { token, body: { events }, keepalive: options.keepalive === true });
+    }
+
+
+    /** Tautan `wa.me` berkode (W8d): kode yang masih berlaku dipakai ulang server. */
+    public whatsappLink(token: string): Promise<WhatsAppLink> {
+        return this.request('POST', '/whatsapp-link', { token, body: {} });
     }
 
 

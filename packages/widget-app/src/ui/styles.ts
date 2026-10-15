@@ -115,6 +115,8 @@ color:var(--pw-primary);font:inherit;font-weight:600;text-align:left;cursor:poin
 .pw-otp-entry[hidden],.pw-otp[hidden]{display:none}
 .pw-handoff{border-bottom:0;border-top:1px solid var(--pw-border)}
 .pw-handoff:disabled{opacity:.6;cursor:progress}
+.pw-whatsapp{display:block;text-decoration:none;color:inherit}
+.pw-whatsapp[hidden]{display:none}
 .pw-otp{padding:14px 16px;border-top:1px solid var(--pw-border);background:var(--pw-bg);display:flex;flex-direction:column;gap:8px}
 .pw-otp-title{margin:0;font-weight:600}
 .pw-otp-hint{margin:0;font-size:12.5px;color:var(--pw-muted)}

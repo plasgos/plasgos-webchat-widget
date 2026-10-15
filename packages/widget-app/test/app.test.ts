@@ -82,6 +82,8 @@ let aiEnabled: boolean | null = null;
 let attachmentsConfig: Record<string, unknown> | null = null;
 /** Aturan proaktif di konfigurasi (W8b) & jawaban klaim berikutnya (antrean; kosong = tak tampil). */
 let proactiveRules: unknown[] | null = null;
+/** `whatsapp.enabled` di konfigurasi (W8d); null = server lama. */
+let whatsappEnabled: boolean | null = null;
 const proactiveReplies: unknown[] = [];
 /** Permintaan PUT ke penyimpanan (bukan API). */
 const uploads: { url: string; headers: Record<string, string>; size: number }[] = [];
@@ -102,7 +104,7 @@ function route(url: string, init?: RequestInit): Response {
     sent.push({ url, body });
     if (url.endsWith(`/widgets/${WIDGET_ID}/config`)) {
         const config = { primary_color: '#1d4ed8', team_title: 'Tim Toko', greeting: 'Halo!', ...appearance };
-        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(aiEnabled === null ? {} : { ai: { enabled: aiEnabled } }), ...(attachmentsConfig ? { attachments: attachmentsConfig } : {}), ...(proactiveRules ? { proactive: { rules: proactiveRules } } : {}), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
+        return json(200, { widget_id: WIDGET_ID, appearance: config, ...(identity ? { identity } : {}), ...(teamOnline === null ? {} : { team: { online: teamOnline } }), ...(hours ?? {}), ...(aiEnabled === null ? {} : { ai: { enabled: aiEnabled } }), ...(attachmentsConfig ? { attachments: attachmentsConfig } : {}), ...(proactiveRules ? { proactive: { rules: proactiveRules } } : {}), ...(whatsappEnabled === null ? {} : { whatsapp: { enabled: whatsappEnabled } }), ...(prechatConfig ? { prechat: prechatConfig, privacy: { consent_text: 'Saya setuju data saya dipakai.', consent_version: 'v3' } } : {}), captcha: { mode: 'off', provider: null, site_key: null } });
     }
     if (url.endsWith('/otp/request')) {
         return json(200, { sent: true, expires_in: 600 });
@@ -137,6 +139,9 @@ function route(url: string, init?: RequestInit): Response {
     if (url.endsWith('/attachments/presign')) {
         const payload = body as { mime: string; size: number };
         return json(201, { attachment_id: 'att_000000000000000000000001', upload: { url: 'https://storage.test/private/webchat/x.pdf?sig=1', method: 'PUT', headers: [{ name: 'Content-Type', value: payload.mime }, { name: 'Content-Length', value: String(payload.size) }], expires_at: '2026-10-15T10:05:00.000Z' }, max_bytes: 1048576 });
+    }
+    if (url.endsWith('/whatsapp-link')) {
+        return json(200, { url: 'https://wa.me/6281100000824?text=Halo%20(kode%20WC-7K3Q9P)', code: 'WC-7K3Q9P', expires_at: '2026-10-16T10:00:00.000Z' });
     }
     if (url.endsWith('/proactive')) {
         return json(200, proactiveReplies.shift() ?? { shown: false, reason: 'frequency', message: null });
@@ -188,6 +193,7 @@ describe('aplikasi widget (iframe)', () => {
         aiEnabled = null;
         attachmentsConfig = null;
         proactiveRules = null;
+        whatsappEnabled = null;
         proactiveReplies.length = 0;
         uploads.length = 0;
         identifyReplies.length = 0;
@@ -783,5 +789,30 @@ describe('aplikasi widget (iframe)', () => {
             await settle();
             expect(claims()).toHaveLength(0);
         });
+    });
+
+
+    it('Lanjutkan di WhatsApp (W8d): tautan disiapkan saat jendela dibuka; tersambung → teks berubah; fitur mati → tak tampil', async () => {
+        whatsappEnabled = true;
+        const { app, container } = await startApp();
+        const entry = container.querySelector<HTMLAnchorElement>('.pw-whatsapp');
+        expect(entry?.hidden).toBe(true);
+        app.command({ name: 'open', args: [] });
+        await settle();
+        expect(sent.filter((e) => e.url.endsWith('/whatsapp-link'))).toHaveLength(1);
+        expect(entry?.hidden).toBe(false);
+        expect(entry?.href).toContain('https://wa.me/6281100000824');
+        expect(entry?.target).toBe('_blank');
+        expect(entry?.rel).toContain('noopener');
+        socket.serverEmit('whatsapp.linked', { phone_masked: '+62 812-****-0001', at: '2026-10-15T10:00:00.000Z' });
+        await settle();
+        expect(entry?.textContent).toBe('Tersambung dengan WhatsApp +62 812-****-0001');
+
+        whatsappEnabled = false;
+        sent.length = 0;
+        const second = await startApp();
+        second.app.command({ name: 'open', args: [] });
+        await settle();
+        expect(sent.filter((e) => e.url.endsWith('/whatsapp-link'))).toHaveLength(0);
     });
 });

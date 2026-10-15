@@ -27,6 +27,8 @@ export interface ServerEvents {
     'conversation.handoff': (payload: { conversation_id: string; active: boolean; reason: string; at: string }) => void;
     /** Agen menyapa pengunjung yang sedang di website (pesan proaktif manual, W8b). */
     'proactive.message': (payload: { message: ProactiveMessage }) => void;
+    /** Pesan WhatsApp berkode masuk — percakapan tersambung ke nomor itu (W8d). */
+    'whatsapp.linked': (payload: { phone_masked: string | null; at: string }) => void;
 }
 
 /** Event widget → server; balasan lewat ack. */
@@ -105,7 +107,7 @@ export class Realtime {
         });
         const events = [
             'message.created', 'message.status', 'typing', 'session.refresh_required', 'session.revoked', 'team.presence',
-            'conversation.state', 'csat.updated', 'conversation.handoff', 'proactive.message',
+            'conversation.state', 'csat.updated', 'conversation.handoff', 'proactive.message', 'whatsapp.linked',
         ] as const;
         for (const name of events) {
             socket.on(name, ((payload: never) => {

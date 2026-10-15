@@ -178,6 +178,9 @@ export class ChatView {
 
     private readonly handoffEntry: HTMLButtonElement;
 
+    /** "Lanjutkan di WhatsApp" (W8d) — tautan biasa (tab baru dari klik pengunjung, tak diblokir sebagai pop-up). */
+    private readonly whatsappEntry: HTMLAnchorElement;
+
     private readonly offline: OfflineForm;
 
     private readonly transcript: TranscriptPanel;
@@ -265,6 +268,10 @@ export class ChatView {
             actions.requestHandoff();
         });
 
+        this.whatsappEntry = this.element('a', 'pw-otp-entry pw-handoff pw-whatsapp');
+        this.whatsappEntry.target = '_blank';
+        this.whatsappEntry.rel = 'noopener noreferrer';
+
         const composer = this.element('form', 'pw-composer');
         const label = this.element('label', 'pw-sr');
         label.htmlFor = 'pw-input';
@@ -285,7 +292,8 @@ export class ChatView {
         composer.append(label, this.attachButton, this.fileInput, this.input, this.sendButton);
         this.window.append(
             header, this.notice, this.otpEntry, this.list, this.typingLine, this.captcha, this.prechat.element,
-            this.otp.element, this.offline.element, this.transcript.element, this.handoffEntry, composer,
+            this.otp.element, this.offline.element, this.transcript.element, this.handoffEntry, this.whatsappEntry,
+            composer,
         );
         this.root.append(this.teaser, this.launcher, this.window);
 
@@ -407,6 +415,14 @@ export class ChatView {
         this.handoffEntry.hidden = !handoffOffered(state);
         this.handoffEntry.disabled = state.handoffBusy;
         this.handoffEntry.textContent = t(state.handoffBusy ? 'handoffBusy' : 'handoffOpen');
+        const whatsappUrl = state.config?.whatsapp?.enabled ? state.whatsappUrl : null;
+        this.whatsappEntry.hidden = whatsappUrl === null;
+        if (whatsappUrl) {
+            this.whatsappEntry.href = whatsappUrl;
+            this.whatsappEntry.textContent = state.whatsappLinked
+                ? t('whatsappLinked', { phone: state.whatsappLinked })
+                : t('whatsappContinue');
+        }
         this.otp.render(state.otp ? {
             step: state.otp.step,
             email: state.otp.email,
