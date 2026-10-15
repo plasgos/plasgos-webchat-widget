@@ -1099,6 +1099,9 @@ export class WidgetApp {
         }
         this.store.update(open ? { open, teaser: null } : { open });
         this.env.host.event(open ? 'open' : 'close');
+        if (open) {
+            this.tracker.widgetOpened();
+        }
         if (!open) {
             return;
         }

@@ -136,4 +136,23 @@ describe('jejak halaman & event (W8a)', () => {
         expect(seen[0]?.keepalive).toBe(true);
         expect(JSON.parse(seen[0]?.body as string)).toEqual({ events });
     });
+
+
+    it('jendela dibuka (W8c): sekali per sesi, tetap terkirim walau jejak halaman dimatikan, patuh persetujuan', async () => {
+        const off = tracker();
+        off.tracker.setEnabled(false);
+        off.tracker.setReady(true);
+        off.tracker.widgetOpened();
+        off.tracker.widgetOpened();
+        off.tracker.pageView({ url: 'https://toko.test/a' });
+        await off.clock.run();
+        expect(off.sent).toEqual([[{ type: 'widget_open' }]]);
+
+        const denied = tracker(true);
+        denied.tracker.setReady(true);
+        denied.tracker.setConsent(false);
+        denied.tracker.widgetOpened();
+        await denied.clock.run();
+        expect(denied.sent).toHaveLength(0);
+    });
 });

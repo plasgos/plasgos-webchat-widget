@@ -24,7 +24,12 @@ export interface TrackEvent {
     readonly properties?: Readonly<Record<string, string | number | boolean | null>>;
 }
 
-export type TrackingEvent = PageViewEvent | TrackEvent;
+/** Jendela chat dibuka (W8c, funnel widget) — tanpa data; dicatat sekali per pengunjung di server. */
+export interface WidgetOpenEvent {
+    readonly type: 'widget_open';
+}
+
+export type TrackingEvent = PageViewEvent | TrackEvent | WidgetOpenEvent;
 
 export interface TrackerOptions {
     readonly send: (events: readonly TrackingEvent[], options: { keepalive: boolean }) => Promise<unknown>;
@@ -80,6 +85,7 @@ export class PageTracker {
     private timer: unknown = null;
     private lastUrl: string | null = null;
     private decided = false;
+    private openedSent = false;
     private readonly schedule: (callback: () => void, ms: number) => unknown;
     private readonly cancel: (handle: unknown) => void;
     private readonly debounceMs: number;
@@ -99,7 +105,8 @@ export class PageTracker {
     public setEnabled(enabled: boolean): void {
         this.enabled = enabled;
         if (!enabled) {
-            this.clear();
+            // Jejak halaman dibuang; sinyal "jendela dibuka" (funnel) tetap.
+            this.queue = this.queue.filter((event) => event.type === 'widget_open');
         }
     }
 
@@ -161,6 +168,19 @@ export class PageTracker {
     }
 
 
+    /**
+     * Jendela chat dibuka — sekali per sesi widget. Penghitung funnel milik tenant, BUKAN jejak halaman: tetap dikirim
+     * walau tenant mematikan pelacakan halaman, tetapi tunduk pada persetujuan cookie.
+     */
+    public widgetOpened(): void {
+        if (this.openedSent) {
+            return;
+        }
+        this.openedSent = true;
+        this.push({ type: 'widget_open' }, true);
+    }
+
+
     /** Kirim sisa antrean SEKARANG (halaman ditutup / disembunyikan). */
     public flushNow(keepalive = true): void {
         if (this.timer !== null) {
@@ -177,8 +197,8 @@ export class PageTracker {
     }
 
 
-    private push(event: TrackingEvent): void {
-        if (!this.enabled || this.consent === 'denied') {
+    private push(event: TrackingEvent, essential = false): void {
+        if ((!this.enabled && !essential) || this.consent === 'denied') {
             return;
         }
         const limit = this.consent === 'pending' ? PENDING_LIMIT : QUEUE_LIMIT;
@@ -202,7 +222,8 @@ export class PageTracker {
 
 
     private canSend(): boolean {
-        return this.enabled && this.ready && this.consent === 'granted';
+        return (this.enabled || this.queue.every((event) => event.type === 'widget_open'))
+            && this.ready && this.consent === 'granted';
     }
 
 
