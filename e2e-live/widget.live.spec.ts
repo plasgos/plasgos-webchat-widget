@@ -61,6 +61,17 @@ interface InboxMessage {
 
 let widgetId = '';
 let identitySecret = '';
+let agentId = '';
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+async function heartbeat(status: 'online' | 'offline'): Promise<void> {
+    if (!agentId) return;
+    await fetch(`${API}/v2/inbox/presence`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json', 'x-crm-agent-id': agentId },
+        body: JSON.stringify({ status }),
+    });
+}
 
 test.beforeAll(async () => {
     for (const widget of await tenant<Widget[]>('GET', '/v2/webchat/widgets')) {
@@ -73,12 +84,24 @@ test.beforeAll(async () => {
         allowed_origins: [STORE_ORIGIN],
         appearance: { primary_color: '#1d4ed8', team_title: 'Tim Toko E2E', greeting: 'Halo dari Toko E2E' },
         security: { captcha: 'off' },
+        // Buka 24 jam (jadwal khusus kosong) — uji tak bergantung jam kerja pengaturan chatroom tenant dev.
+        business_hours: { source: 'custom', schedule: {} },
     });
     widgetId = created.widget.widget_id;
+    // Tim harus daring, kalau tidak widget menggantikan kolom tulis dengan formulir "tinggalkan pesan" (W5b). Pemilik
+    // bertindak sebagai agen pertamanya (`x-crm-agent-id`, seperti agen yang membuka inbox) dengan detak berkala.
+    const presence = await tenant<{ items: { agent: { id: string } }[] }>('GET', '/v2/inbox/presence');
+    agentId = presence.items[0]?.agent.id ?? '';
+    await heartbeat('online');
+    heartbeatTimer = setInterval(() => {
+        void heartbeat('online');
+    }, 20_000);
     identitySecret = created.identity_secret;
 });
 
 test.afterAll(async () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    await heartbeat('offline');
     if (widgetId) {
         await tenant('DELETE', `/v2/webchat/widgets/${widgetId}`);
     }
@@ -97,7 +120,7 @@ async function openStore(page: Page): Promise<FrameLocator> {
 }
 
 async function send(frame: FrameLocator, text: string): Promise<void> {
-    const input = frame.getByRole('textbox');
+    const input = frame.getByRole('textbox', { name: 'Pesan', exact: true });
     await input.fill(text);
     await input.press('Enter');
 }
@@ -232,6 +255,24 @@ test('pelanggan login di website: Plasgos("identify") → sesi widget terverifik
     }), { timeout: 15_000 }).toBe('verified');
 });
 
+test('halaman chat penuh /m (WebView & tautan langsung): jendela terbuka, pesan sampai inbox; #identity_token → terverifikasi, fragmen dihapus', async ({ page }) => {
+    const sub = `aplikasi-${String(Date.now())}`;
+    await page.goto(`${WIDGET_ORIGIN}/m/${widgetId}?utm_source=instagram#identity_token=${identityToken(sub)}`);
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe('');
+    expect(page.url()).toBe(`${WIDGET_ORIGIN}/m/${widgetId}?utm_source=instagram`);
+
+    const question = `Dari aplikasi ${String(Date.now())}`;
+    const input = page.getByRole('textbox', { name: 'Pesan', exact: true });
+    await input.fill(question);
+    await input.press('Enter');
+    const conversation = await conversationOf(question);
+    const visitorId = conversation.customer.identity?.external_id ?? '';
+    const visitor = await tenant<{ trust_level: string; attribution_first: { utm_source: string | null } | null }>('GET', `/v2/webchat/visitors/${visitorId}`);
+    expect(visitor.trust_level).toBe('verified');
+    expect(visitor.attribution_first?.utm_source).toBe('instagram');
+});
+
 test('pre-chat wajib: pengunjung mengisi formulir perkenalan + persetujuan lalu bisa bertanya', async ({ page }) => {
     await tenant('PATCH', `/v2/webchat/widgets/${widgetId}`, {
         prechat: {
@@ -246,15 +287,16 @@ test('pre-chat wajib: pengunjung mengisi formulir perkenalan + persetujuan lalu 
         privacy: { consent_text: 'Saya setuju data saya dipakai untuk menjawab pertanyaan.', consent_version: 'e2e-1' },
     });
     const frame = await openStore(page);
-    await expect(frame.getByRole('textbox', { name: 'Pesan' })).toBeDisabled();
+    await expect(frame.getByRole('textbox', { name: 'Pesan', exact: true })).toBeDisabled();
 
-    await frame.getByLabel('Nama *').fill('Sari E2E');
-    await frame.getByLabel('Email').fill(`sari.${String(Date.now())}@contoh.co.id`);
-    await frame.getByLabel('Perlu bantuan soal *').selectOption('sales');
-    await frame.getByLabel('Saya setuju data saya dipakai untuk menjawab pertanyaan.').check();
-    await frame.getByRole('button', { name: 'Mulai chat' }).click();
+    const prechatForm = frame.locator('form.pw-prechat:not(.pw-offline)');
+    await prechatForm.getByLabel('Nama *').fill('Sari E2E');
+    await prechatForm.getByLabel('Email').fill(`sari.${String(Date.now())}@contoh.co.id`);
+    await prechatForm.getByLabel('Perlu bantuan soal *').selectOption('sales');
+    await prechatForm.getByLabel('Saya setuju data saya dipakai untuk menjawab pertanyaan.').check();
+    await prechatForm.getByRole('button', { name: 'Mulai chat' }).click();
 
-    await expect(frame.locator('form.pw-prechat')).toBeHidden();
+    await expect(frame.locator('form.pw-prechat:not(.pw-offline)')).toBeHidden();
     const question = `Setelah pre-chat ${String(Date.now())}`;
     await send(frame, question);
     await expect(visitorBubble(frame, question).locator('.pw-meta')).toContainText('Sampai', { timeout: 20_000 });

@@ -140,6 +140,10 @@ export function availabilityOf(state: AppState): AvailabilityStatus {
 /** Formulir "tinggalkan pesan" (W5b): tim tak `open`, mode bukan `hidden`, alamat balasan belum diketahui. */
 export function needsOfflineForm(state: AppState): boolean {
     const mode = state.config?.offline?.mode ?? 'form';
+    // Mode `ai`: saat tim tak tersedia AI widget yang menjawab — kolom tulis tetap; AI mati → kembali ke formulir.
+    if (mode === 'ai' && state.config?.ai?.enabled === true) {
+        return false;
+    }
     return availabilityOf(state) !== 'open' && mode !== 'hidden' && !state.emailOnFile
         && state.config?.availability !== undefined && state.config.availability !== null;
 }

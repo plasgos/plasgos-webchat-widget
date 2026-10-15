@@ -470,6 +470,25 @@ describe('aplikasi widget (iframe)', () => {
     });
 
 
+    it('mode offline "ai" + AI widget menyala → di luar jam kerja kolom tulis tetap (AI menjawab); AI mati → formulir', async () => {
+        hours = {
+            business_hours: { source: 'custom', open: false, next_open_at: '2099-11-02T14:00:00.000Z', timezone: 'Asia/Jakarta', always_open: false },
+            availability: { status: 'closed', reply_estimate_minutes: null },
+            offline: { mode: 'ai', message: null },
+        };
+        aiEnabled = true;
+        const withAi = await startApp();
+        withAi.app.command({ name: 'open', args: [] });
+        expect((withAi.container.querySelector('.pw-offline') as HTMLFormElement).hidden).toBe(true);
+        expect((withAi.container.querySelector('.pw-input') as HTMLTextAreaElement).disabled).toBe(false);
+
+        aiEnabled = false;
+        const withoutAi = await startApp();
+        withoutAi.app.command({ name: 'open', args: [] });
+        expect((withoutAi.container.querySelector('.pw-offline') as HTMLFormElement).hidden).toBe(false);
+    });
+
+
     it('jam kerja & tim online → estimasi balas di header; tim luring (away) dengan email diketahui → tanpa formulir', async () => {
         teamOnline = true;
         emailOnFile = true;
