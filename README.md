@@ -52,7 +52,10 @@ PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.com pnpm build   # bawaan (prod
 PLASGOS_WIDGET_ORIGIN=https://widget.staging.example pnpm build   # lingkungan lain
 ```
 
-Atribut `data-widget-origin` pada tag loader menimpanya (staging/uji).
+Atribut `data-widget-origin` pada tag loader menimpanya (staging/uji) — wajib `https:` (http hanya `localhost`/`127.0.0.1`).
+Paket npm & elemen `<plasgos-webchat>` hanya menerima `loaderUrl`/`widgetOrigin` (atribut `loader-url`/`widget-origin`)
+dari host `plasgoschat.com`, origin halaman itu sendiri, atau loopback — atribut sisipan penyerang tak bisa memuat skrip
+atau iframe lain (audit 2026-10-16).
 
 ### Fixture & stub
 
