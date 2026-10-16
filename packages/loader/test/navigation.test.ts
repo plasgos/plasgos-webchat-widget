@@ -40,4 +40,20 @@ describe('deteksi navigasi SPA (tanpa Navigation API)', () => {
         expect(window.history.state).toEqual({ halaman: 2 });
         expect(onChange).not.toHaveBeenCalled();
     });
+    it('audit M4: watcher baru setelah stop (shutdown → boot) tetap menerima navigasi; jangkar # bukan halaman baru', () => {
+        const first = vi.fn();
+        watchNavigation(window, first)();
+        const second = vi.fn();
+        const stop = watchNavigation(window, second);
+
+        window.history.pushState(null, '', '/keranjang');
+        vi.advanceTimersByTime(300);
+        window.history.pushState(null, '', '/keranjang#ulasan');
+        vi.advanceTimersByTime(300);
+
+        expect(first).not.toHaveBeenCalled();
+        expect(second).toHaveBeenCalledTimes(1);
+        stop();
+    });
+
 });

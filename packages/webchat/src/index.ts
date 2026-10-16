@@ -25,8 +25,12 @@ export type WebchatEventName =
 export interface WebchatOptions {
     readonly widgetId: string;
     readonly locale?: Locale;
-    /** Identity token dari SERVER tenant (JWT bertanda tangan secret widget) — pengunjung terverifikasi. */
-    readonly identityToken?: string;
+    /**
+     * Identity token dari SERVER tenant (JWT bertanda tangan secret widget) — pengunjung terverifikasi. `null` =
+     * website menyatakan TAK ADA yang login (mis. halaman pertama setelah logout lewat redirect): sesi hasil login
+     * website sebelumnya diakhiri, bukan dilanjutkan.
+     */
+    readonly identityToken?: string | null;
     readonly hideLauncher?: boolean;
     readonly load?: 'idle' | 'interaction' | 'eager';
     readonly autoPageTracking?: boolean;
@@ -54,7 +58,8 @@ export interface WebchatClient {
     close(): void;
     toggle(): void;
     shutdown(): void;
-    identify(token: string): void;
+    /** `null` = tak ada yang login (sesi hasil login website diakhiri). */
+    identify(token: string | null): void;
     page(info?: { readonly url?: string; readonly title?: string }): void;
     track(name: string, props?: Readonly<Record<string, unknown>>): void;
     consent(consent: { readonly analytics?: boolean; readonly chat?: boolean }): void;
@@ -76,6 +81,30 @@ interface TrustedTypesLike {
 
 type HostWindow = Window & { Plasgos?: CommandFunction; trustedTypes?: TrustedTypesLike };
 
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+
+/**
+ * URL skrip/origin widget yang boleh dipakai: host Plasgos (`plasgoschat.com` & subdomainnya, https), origin halaman
+ * ini sendiri, atau loopback (pengembangan). Selain itu ditolak — atribut elemen yang disisipkan lewat celah injeksi
+ * HTML tak bisa memuat skrip penyerang (menembus CSP `strict-dynamic` & Trusted Types) atau mengirim token identitas
+ * ke iframe penyerang (audit 2026-10-16).
+ */
+export function isTrustedPlasgosUrl(value: string, pageOrigin: string): boolean {
+    let url: URL;
+    try {
+        url = new URL(value, pageOrigin);
+    } catch {
+        return false;
+    }
+    if (url.origin === pageOrigin) {
+        return true;
+    }
+    if (LOOPBACK_HOSTS.includes(url.hostname)) {
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    }
+    return url.protocol === 'https:' && (url.hostname === 'plasgoschat.com' || url.hostname.endsWith('.plasgoschat.com'));
+}
+
 const LOADER_MARK = 'data-plasgos-webchat-loader';
 const TRUSTED_TYPES_POLICY = 'plasgos-webchat';
 const EMPTY_STATE: WebchatState = { booted: false, open: false, unread: 0, trustLevel: null };
@@ -90,7 +119,8 @@ function warn(message: string, detail?: unknown): void {
 
 /** Stub antrean yang sama persis dengan snippet: perintah sebelum loader siap ditahan lalu diputar ulang. */
 function commandFunction(win: HostWindow): CommandFunction {
-    if (!win.Plasgos) {
+    // `typeof` — elemen `<form id="Plasgos">` di halaman (DOM clobbering) bukan fungsi perintah.
+    if (typeof win.Plasgos !== 'function') {
         const queue: CommandFunction = (...args: unknown[]): void => {
             queue.q?.push(args);
         };
@@ -118,7 +148,14 @@ let trustedPolicy: ScriptUrlPolicy | null | undefined;
 function scriptUrl(win: HostWindow, url: string): string {
     if (trustedPolicy === undefined) {
         try {
-            const rules = { createScriptURL: (value: string): string => value };
+            const rules = {
+                createScriptURL: (value: string): string => {
+                    if (!isTrustedPlasgosUrl(value, win.location.origin)) {
+                        throw new TypeError(`URL loader di luar Plasgos ditolak: ${value}`);
+                    }
+                    return value;
+                },
+            };
             trustedPolicy = win.trustedTypes?.createPolicy(TRUSTED_TYPES_POLICY, rules) ?? null;
         } catch {
             trustedPolicy = null;
@@ -129,7 +166,9 @@ function scriptUrl(win: HostWindow, url: string): string {
 
 /** Suntik loader sekali per halaman — snippet/plugin yang sudah memasangnya tak digandakan. */
 function injectLoader(win: HostWindow, doc: Document, options: WebchatOptions): void {
-    const alreadyInstalled = '__plasgosWebchat' in win
+    const installed: unknown = Reflect.get(win, '__plasgosWebchat');
+    // Loader terpasang = objek ber-`call` (bukan elemen ber-id sama di halaman — DOM clobbering).
+    const alreadyInstalled = (typeof installed === 'object' && installed !== null && typeof Reflect.get(installed, 'call') === 'function')
         || doc.querySelector(`script[${LOADER_MARK}]`) !== null
         // Snippet resmi memasang tag loader dengan `data-widget-id` (URL CDN apa pun: produksi, staging, versi
         // terkunci); tag loader tulisan tangan tanpa atribut itu dikenali dari path CDN-nya.
@@ -138,6 +177,15 @@ function injectLoader(win: HostWindow, doc: Document, options: WebchatOptions): 
         return;
     }
 
+    const loaderUrl = options.loaderUrl ?? DEFAULT_LOADER_URL;
+    if (!isTrustedPlasgosUrl(loaderUrl, win.location.origin)) {
+        warn(`loaderUrl "${loaderUrl}" bukan host Plasgos / origin halaman ini — loader tidak dipasang`);
+        return;
+    }
+    if (options.widgetOrigin && !isTrustedPlasgosUrl(options.widgetOrigin, win.location.origin)) {
+        warn(`widgetOrigin "${options.widgetOrigin}" bukan host Plasgos (https) — loader tidak dipasang`);
+        return;
+    }
     const script = doc.createElement('script');
     script.async = true;
     script.setAttribute(LOADER_MARK, '');
@@ -149,7 +197,7 @@ function injectLoader(win: HostWindow, doc: Document, options: WebchatOptions): 
         script.nonce = options.nonce;
     }
     try {
-        script.src = scriptUrl(win, options.loaderUrl ?? DEFAULT_LOADER_URL);
+        script.src = scriptUrl(win, loaderUrl);
     } catch (error) {
         warn('loader tak bisa dipasang — izinkan kebijakan Trusted Types "plasgos-webchat" di CSP website', error);
         return;
@@ -217,7 +265,7 @@ export function loadWebchat(options: WebchatOptions): Promise<WebchatClient> {
     const win = window as HostWindow;
     const send = commandFunction(win);
     send('boot', bootOptionsOf(options));
-    if (options.identityToken) {
+    if (options.identityToken || options.identityToken === null) {
         send('identify', { token: options.identityToken });
     }
     const install = (): void => {

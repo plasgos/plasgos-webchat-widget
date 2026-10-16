@@ -30,6 +30,18 @@ const ATTACHMENT_ERROR_CODES: readonly string[] = [
 ];
 
 const RETRY_STEPS_MS = [2000, 5000, 10000, 30000];
+/** Galat boot yang bukan sementara & bukan fatal dicoba ulang sebanyak ini, lalu berhenti dengan pemberitahuan. */
+const MAX_START_ATTEMPTS = 6;
+/** Tab lain yang logout: tab ini menunggu sebentar agar sesi baru tab itu dipakai bersama (satu pengunjung). */
+const TAB_RESTART_DELAY_MS = 1200;
+
+/** Keadaan milik SATU pengunjung — dikosongkan saat sesinya berakhir (logout, ganti akun, logout di tab lain). */
+const VISITOR_STATE_RESET: Partial<AppState> = {
+    messages: [], unread: 0, conversationId: null, trustLevel: null, prechatPending: false, prechatError: null,
+    emailOnFile: false, offlineError: null, conversationStatus: 'open', survey: null, surveyBusy: false, surveyError: null,
+    transcript: null, handoffActive: false, handoffBusy: false, teaser: null, whatsappUrl: null, whatsappLinked: null,
+    otp: null, notice: null, agentTypingUntil: 0,
+};
 const MEDIA_REFRESH_MS = 30_000;
 const TYPING_THROTTLE_MS = 2500;
 const TYPING_IDLE_MS = 3000;
@@ -165,6 +177,21 @@ export class WidgetApp {
 
     private whatsappPending = false;
 
+    /** Naik setiap sesi pengunjung berakhir — hasil async milik sesi lama dibuang, tak masuk ke sesi baru. */
+    private generation = 0;
+
+    private startAttempts = 0;
+
+    /** Halaman chat penuh `/m/` (bukan iframe di website): jendela selalu terbuka, logout = sesi anonim baru. */
+    private standalone = false;
+
+    /**
+     * `conversation_started` dipancarkan saat id percakapan pertama kali diketahui SETELAH sesi siap — dari mana pun
+     * datangnya (status pesan, pesan tim, riwayat, formulir offline); percakapan yang sudah ada saat muat bukan
+     * "mulai".
+     */
+    private watchConversation = false;
+
 
     public constructor(private readonly env: AppEnvironment) {
         const win = env.window;
@@ -298,7 +325,12 @@ export class WidgetApp {
             },
         });
         this.view.mount(env.container);
+        let previousConversation: string | null = null;
         this.store.subscribe((state) => {
+            if (this.watchConversation && previousConversation === null && state.conversationId !== null) {
+                this.env.host.event('conversation_started', {});
+            }
+            previousConversation = state.conversationId;
             this.render(state);
         });
         this.tabs.onMessage((message) => {
@@ -322,6 +354,10 @@ export class WidgetApp {
             return;
         }
         this.started = true;
+        if (payload.resetSession === true) {
+            // Logout website sebelum iframe siap: sesi tersimpan milik pengunjung sebelumnya tak dilanjutkan.
+            this.storage.remove(this.keys.refresh);
+        }
         this.page = { url: payload.page.url, title: payload.page.title };
         this.hostOrigin = payload.hostOrigin;
         this.hideLauncher = payload.options.hideLauncher === true;
@@ -352,7 +388,8 @@ export class WidgetApp {
                 this.setOpen(!this.store.get().open);
                 break;
             case 'shutdown':
-                void this.shutdown();
+                // Iframe dicabut loader setelah ini; halaman penuh `/m/` tetap hidup → langsung sesi anonim baru.
+                void this.shutdown().then(() => (this.standalone ? this.start() : undefined));
                 break;
             case 'page': {
                 const page = pageOf(first);
@@ -411,16 +448,20 @@ export class WidgetApp {
 
     /** Mode mandiri (dokumen dibuka langsung, bukan dalam iframe website): jendela langsung terbuka. */
     public openStandalone(): void {
+        this.standalone = true;
         this.setOpen(true);
     }
 
 
     private async start(referrer = '', captchaToken: string | null = null): Promise<void> {
+        const generation = this.generation;
         try {
             if (!this.store.get().config) {
                 const config = await this.api.config(this.env.widgetId);
                 this.applyConfig(config);
-                this.store.update({ locale: resolveLocale(this.preferredLocale, config.appearance.locale_default ?? 'id') });
+                // Konfigurasi tanpa `appearance` (server lama/terpotong) tak boleh menggagalkan boot.
+                const { appearance } = config as { appearance?: Partial<WidgetConfig['appearance']> };
+                this.store.update({ locale: resolveLocale(this.preferredLocale, appearance?.locale_default ?? 'id') });
             }
             const session = await this.session.start({
                 page_origin: this.hostOrigin,
@@ -432,6 +473,10 @@ export class WidgetApp {
                 locale: this.store.get().locale,
                 ...(captchaToken ? { captcha_token: captchaToken } : {}),
             });
+            if (generation !== this.generation) {
+                return;
+            }
+            this.startAttempts = 0;
             // Halaman pendaratan = jejak pertama kunjungan; navigasi berikutnya lewat perintah `page` (loader).
             this.tracker.pageView({ ...this.page, referrer: this.referrer });
             this.tracker.setReady(true);
@@ -447,6 +492,7 @@ export class WidgetApp {
             // Selalu dari catatan pengunjung di server — `session.conversation` masih null bila pesan terakhir baru
             // diterima (antre) saat halaman dimuat ulang.
             await this.syncHistory();
+            this.watchConversation = true;
             this.realtime.connect();
             // Pesan proaktif hanya untuk pengunjung yang belum bercakap (server memeriksa ulang).
             if (!this.store.get().conversationId) {
@@ -456,14 +502,29 @@ export class WidgetApp {
             await this.applySignOut();
             await this.applyIdentity();
         } catch (error) {
-            this.onStartError(error, referrer);
+            if (generation === this.generation) {
+                this.onStartError(error, referrer);
+            }
         }
     }
 
 
     private onStartError(error: unknown, referrer: string): void {
+        this.startAttempts += 1;
+        const retry = (delay: number): void => {
+            const generation = this.generation;
+            setTimeout(() => {
+                if (generation === this.generation) {
+                    void this.start(referrer);
+                }
+            }, delay);
+        };
         if (!(error instanceof ApiError)) {
+            // Galat tak terduga (jaringan putus di tengah, data tak lengkap): dicoba ulang — dulu widget macet.
             this.store.update({ notice: { code: 'unknown', fatal: false } });
+            if (this.startAttempts < MAX_START_ATTEMPTS) {
+                retry(this.nextRetryDelay());
+            }
             return;
         }
 
@@ -483,9 +544,10 @@ export class WidgetApp {
 
         const delay = error.code === 'rate_limited' && error.retryAfterSeconds ? error.retryAfterSeconds * 1000 : this.nextRetryDelay();
         this.store.update({ notice: { code: error.transient ? error.code === 'rate_limited' ? 'rate_limited' : 'network' : 'unknown', vars: { seconds: Math.ceil(delay / 1000) }, fatal: false } });
-        setTimeout(() => {
-            void this.start(referrer);
-        }, delay);
+        // Galat 4xx yang bukan sementara tak akan sembuh dengan mencoba terus — berhenti setelah beberapa kali.
+        if (error.transient || this.startAttempts < MAX_START_ATTEMPTS) {
+            retry(delay);
+        }
     }
 
 
@@ -536,7 +598,9 @@ export class WidgetApp {
         }
         const nextOpenAt = this.store.get().nextOpenAt;
         const untilOpen = nextOpenAt ? Date.parse(nextOpenAt) - Date.now() : Number.POSITIVE_INFINITY;
-        const opensSoon = Number.isFinite(untilOpen) && untilOpen < CONFIG_REFRESH_MS;
+        // Jam buka yang SUDAH lewat (jam server/perangkat beda, cache) bukan "segera buka" — dulu memicu siklus
+        // baca ulang 2×/menit tanpa henti dan status berkedip.
+        const opensSoon = Number.isFinite(untilOpen) && untilOpen > 0 && untilOpen < CONFIG_REFRESH_MS;
         const delay = opensSoon ? Math.max(untilOpen, 0) : CONFIG_REFRESH_MS;
         this.configTimer = setTimeout(() => {
             this.configTimer = null;
@@ -577,7 +641,7 @@ export class WidgetApp {
             return;
         }
         this.store.update({ offlineBusy: true, offlineError: null });
-        const clientMessageId = this.env.window.crypto.randomUUID();
+        const clientMessageId = newMessageId(this.env.window);
         try {
             const result = await this.session.withToken((token) => this.api.offlineMessage(token, {
                 client_message_id: clientMessageId,
@@ -595,6 +659,7 @@ export class WidgetApp {
                 text: values.text,
                 status: 'accepted',
                 timestamp: new Date().toISOString(),
+                local: true,
             };
             this.store.update((state) => ({
                 messages: upsertMessages(state.messages, [message]),
@@ -605,6 +670,7 @@ export class WidgetApp {
             }));
             this.tabs.post({ type: 'sent', message });
             this.view.offlineSubmitted();
+            this.env.host.event('lead_captured', { source: 'offline_form' });
         } catch (error) {
             if (error instanceof ApiError && FATAL_SESSION_CODES.includes(error.code)) {
                 this.store.update({ offlineBusy: false });
@@ -621,13 +687,14 @@ export class WidgetApp {
     private send(text: string): void {
         const message: ChatMessage = {
             id: null,
-            client_message_id: this.env.window.crypto.randomUUID(),
+            client_message_id: newMessageId(this.env.window),
             direction: 'inbound',
             sender: { kind: 'customer', name: null },
             type: 'text',
             text,
             status: 'pending',
             timestamp: new Date().toISOString(),
+            local: true,
         };
         this.store.update((state) => ({ messages: upsertMessages(state.messages, [message]), teaser: null }));
         this.proactive.stop();
@@ -653,7 +720,7 @@ export class WidgetApp {
             this.store.update({ notice: { code: 'attachment_too_large', vars: { mb: settings.max_mb }, fatal: false } });
             return;
         }
-        const clientMessageId = this.env.window.crypto.randomUUID();
+        const clientMessageId = newMessageId(this.env.window);
         const image = file.type.startsWith('image/');
         const preview = image && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
         this.uploads.set(clientMessageId, { file, attachmentId: null });
@@ -666,6 +733,7 @@ export class WidgetApp {
             text: null,
             status: 'pending',
             timestamp: new Date().toISOString(),
+            local: true,
             attachment: { type: image ? 'image' : 'document', url: preview, mime_type: file.type, filename: file.name, size: file.size, expires_at: null },
         };
         this.store.update((state) => ({ messages: upsertMessages(state.messages, [message]) }));
@@ -678,7 +746,7 @@ export class WidgetApp {
      * `postback` (server memverifikasinya terhadap pesan asal). Tautan tak lewat sini — dibuka langsung oleh tampilan.
      */
     private choose(messageId: string, item: { id: string; title: string }): void {
-        const clientMessageId = this.env.window.crypto.randomUUID();
+        const clientMessageId = newMessageId(this.env.window);
         this.postbacks.set(clientMessageId, { message_id: messageId, id: item.id });
         const message: ChatMessage = {
             id: null,
@@ -689,6 +757,7 @@ export class WidgetApp {
             text: item.title,
             status: 'pending',
             timestamp: new Date().toISOString(),
+            local: true,
         };
         this.store.update((state) => ({ messages: upsertMessages(state.messages, [message]) }));
         void this.flushOutbox();
@@ -750,6 +819,7 @@ export class WidgetApp {
 
     private async sendOne(message: ChatMessage): Promise<boolean> {
         const clientMessageId = message.client_message_id ?? '';
+        const generation = this.generation;
         try {
             const attachmentId = await this.uploadedAttachmentId(clientMessageId);
             const postback = this.postbacks.get(clientMessageId);
@@ -759,18 +829,23 @@ export class WidgetApp {
                 ...(attachmentId ? { attachment_ids: [attachmentId] } : {}),
                 page: this.page,
             }));
+            if (generation !== this.generation) {
+                return false;
+            }
             this.uploads.delete(clientMessageId);
             this.postbacks.delete(clientMessageId);
             const accepted: ChatMessage = { ...message, id: result.message_id, status: 'accepted' };
             this.store.update((state) => ({
                 messages: upsertMessages(state.messages, [accepted]),
                 notice: state.notice?.fatal ? state.notice : null,
+                // Kiriman berhasil = jaringan pulih (dulu banner "offline" menetap sampai socket tersambung ulang).
+                connection: state.connection === 'offline' && this.realtime.connected ? 'online' : state.connection,
             }));
             this.tabs.post({ type: 'sent', message: accepted });
             this.retryAttempt = 0;
             return true;
         } catch (error) {
-            return this.onSendError(clientMessageId, error);
+            return generation === this.generation ? this.onSendError(clientMessageId, error) : false;
         }
     }
 
@@ -893,7 +968,7 @@ export class WidgetApp {
         if (known || message.direction !== 'outbound') {
             return;
         }
-        this.realtime.emit('delivered', { up_to: message.timestamp });
+        this.realtime.emitSpaced('delivered', { up_to: message.timestamp });
         if (this.isReading()) {
             this.markRead();
             return;
@@ -972,7 +1047,12 @@ export class WidgetApp {
 
 
     private async syncHistory(): Promise<void> {
+        const generation = this.generation;
         const history = await this.session.withToken((token) => this.api.conversation(token));
+        if (generation !== this.generation) {
+            return;
+        }
+        this.countMissedReplies(history.messages);
         this.store.update((state) => ({
             messages: upsertMessages(state.messages, history.messages),
             conversationId: history.conversation?.id ?? state.conversationId,
@@ -1068,8 +1148,27 @@ export class WidgetApp {
         }
         if (payload.conversation_id && !this.store.get().conversationId) {
             this.store.update({ conversationId: payload.conversation_id });
-            this.env.host.event('conversation_started', {});
         }
+    }
+
+
+    /**
+     * Balasan tim yang baru diketahui lewat sinkron (sambung ulang, muat ulang) dan belum dibaca → lencana belum
+     * dibaca;
+     * dulu hanya pesan socket yang dihitung.
+     */
+    private countMissedReplies(incoming: readonly ChatMessage[]): void {
+        const known = new Set(this.store.get().messages.map((message) => message.id).filter((id) => id !== null));
+        const missed = incoming.filter((message) => message.direction === 'outbound' && message.id !== null
+            && !known.has(message.id) && message.status !== 'read').length;
+        if (!missed) {
+            return;
+        }
+        if (this.isReading()) {
+            this.markRead();
+            return;
+        }
+        this.store.update((state) => ({ unread: state.unread + missed }));
     }
 
 
@@ -1097,7 +1196,15 @@ export class WidgetApp {
         const after = lastServerTimestamp(this.store.get().messages);
         try {
             if (reconnected && after) {
-                const page = await this.session.withToken((token) => this.api.messagesAfter(token, after));
+                const generation = this.generation;
+                // 1 ms sebelum pesan terakhir: kursor server `after` ketat, pesan berwaktu SAMA tak terlewati
+                // (duplikat dibuang per id oleh `upsertMessages`).
+                const since = new Date(Date.parse(after) - 1).toISOString();
+                const page = await this.session.withToken((token) => this.api.messagesAfter(token, since));
+                if (generation !== this.generation) {
+                    return;
+                }
+                this.countMissedReplies(page.messages);
                 this.store.update((state) => ({ messages: upsertMessages(state.messages, page.messages) }));
             } else {
                 await this.syncHistory();
@@ -1170,7 +1277,7 @@ export class WidgetApp {
             return;
         }
         if (this.realtime.connected) {
-            this.realtime.emit('read', {});
+            this.realtime.emitSpaced('read', {});
         } else {
             void this.session.withToken((token) => this.api.markRead(token)).catch(() => undefined);
         }
@@ -1208,12 +1315,17 @@ export class WidgetApp {
         } else if (message.type === 'read') {
             this.store.update({ unread: 0 });
         } else if (message.type === 'shutdown') {
-            this.realtime.disconnect();
-            this.session.clear();
-            this.store.update({
-                messages: [], unread: 0, conversationId: null, trustLevel: null, emailOnFile: false,
-                conversationStatus: 'open', survey: null, transcript: null, handoffActive: false, handoffBusy: false,
-            });
+            // Tab lain logout: sesi tab itu sudah dicabut & storage sudah dibersihkannya — tab ini TIDAK menghapus
+            // storage (bisa menghapus refresh token BARU tab itu), cukup melepas sesi di memori lalu memulai lagi
+            // (sesi baru tab asal dipakai bersama). Dulu tab ini menjadi "zombi": pesan menggantung "mengirim".
+            this.endVisitor();
+            this.session.forget();
+            const generation = this.generation;
+            setTimeout(() => {
+                if (generation === this.generation) {
+                    void this.start(this.referrer);
+                }
+            }, TAB_RESTART_DELAY_MS);
         }
     }
 
@@ -1247,6 +1359,7 @@ export class WidgetApp {
                 notice: null,
                 emailOnFile: state.emailOnFile || gaveEmail,
             }));
+            this.env.host.event('lead_captured', { source: 'prechat' });
             this.view.focusInput();
         } catch (error) {
             this.store.update({ prechatBusy: false, prechatError: error instanceof ApiError ? error.code : 'unknown' });
@@ -1283,6 +1396,7 @@ export class WidgetApp {
             this.store.update({
                 otp: null, trustLevel: session.trust_level, prechatPending: false, notice: null, emailOnFile: true,
             });
+            this.env.host.event('lead_captured', { source: 'otp_email' });
             await this.syncHistory();
             this.realtime.reconnect();
             this.view.focusInput();
@@ -1392,16 +1506,32 @@ export class WidgetApp {
 
 
     private async shutdown(): Promise<void> {
-        this.realtime.disconnect();
         // Jejak yang tertunda milik pengunjung yang keluar — dikirim dulu, lalu pelacak berhenti sampai sesi baru.
         this.tracker.flushNow(false);
-        this.tracker.setReady(false);
-        this.proactive.stop();
+        this.endVisitor();
         await this.session.shutdown();
-        this.store.update({
-            messages: [], unread: 0, conversationId: null, trustLevel: null, open: false, prechatPending: false,
-            emailOnFile: false, conversationStatus: 'open', survey: null, transcript: null, handoffActive: false, handoffBusy: false,
-        });
+    }
+
+
+    /**
+     * Sesi pengunjung ini berakhir: SEMUA keadaan miliknya dikosongkan — termasuk tautan "Lanjutkan di WhatsApp"
+     * berkode miliknya (dulu tertinggal, sehingga orang berikutnya di perangkat bersama mengirim kode orang
+     * sebelumnya), panel OTP, dan kartu proaktif — dan hasil async yang masih berjalan dibuang (`generation`).
+     */
+    private endVisitor(): void {
+        this.generation += 1;
+        this.watchConversation = false;
+        this.realtime.disconnect();
+        this.tracker.setReady(false);
+        this.proactive.reset();
+        if (this.retryTimer !== null) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = null;
+        }
+        this.uploads.clear();
+        this.postbacks.clear();
+        this.whatsappPending = false;
+        this.store.update({ ...VISITOR_STATE_RESET, open: this.standalone });
     }
 
 
@@ -1482,4 +1612,21 @@ function pageOf(value: unknown): PageInfo | null {
     }
     const record = value as Record<string, unknown>;
     return typeof record['url'] === 'string' ? { url: record['url'], title: typeof record['title'] === 'string' ? record['title'] : '' } : null;
+}
+
+
+/**
+ * `client_message_id` (UUID v4). Safari < 15.4 belum punya `crypto.randomUUID` — dulu `send()` melempar SETELAH kotak
+ * tulis dikosongkan sehingga teks pengunjung hilang.
+ */
+function newMessageId(win: Window): string {
+    const crypto = win.crypto as Crypto & { randomUUID?: () => string };
+    if (typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

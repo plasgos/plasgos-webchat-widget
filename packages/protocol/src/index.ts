@@ -79,7 +79,16 @@ export interface BootOptions {
 
 /** Pesan halaman tenant → iframe. */
 export interface HostMessages {
-    'host.init': { readonly options: BootOptions; readonly page: PageInfo; readonly hostOrigin: string };
+    'host.init': {
+        readonly options: BootOptions;
+        readonly page: PageInfo;
+        readonly hostOrigin: string;
+        /**
+         * `Plasgos('shutdown')` (logout) datang SEBELUM iframe siap: sesi tersimpan milik pengunjung sebelumnya dibuang
+         * sebelum sesi dimulai — dulu perintah itu hilang dan orang berikutnya melanjutkan sesi terverifikasi lama.
+         */
+        readonly resetSession?: boolean;
+    };
     'host.command': { readonly name: HostCommand; readonly args: readonly unknown[] };
     'host.viewport': { readonly width: number; readonly height: number };
     /** Sinyal halaman untuk pemicu pesan proaktif (W8b): kedalaman gulir (kelipatan 10 %) & niat keluar (desktop). */

@@ -31,7 +31,8 @@ export interface InstallResult {
 export function installGlobal(host: Window, protocolVersion: number, handler: CommandHandler): InstallResult {
     const target = host as HostWindow;
     const existing = target[GLOBAL_KEY];
-    if (existing) {
+    // `typeof … call` — elemen ber-id `__plasgosWebchat` di halaman (DOM clobbering) bukan loader terpasang.
+    if (typeof existing?.call === 'function') {
         return { instance: existing, created: false };
     }
 

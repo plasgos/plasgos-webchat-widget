@@ -35,7 +35,7 @@ export function PlasgosWebchat(props: PlasgosWebchatProps): null {
     const optionsKey = JSON.stringify(options);
     const optionsRef = useRef(options);
     optionsRef.current = options;
-    const previousToken = useRef<string | undefined>(undefined);
+    const previousToken = useRef<string | null | undefined>(undefined);
     const previousPath = useRef<string | undefined>(pathname);
 
     useEffect(() => {
@@ -49,6 +49,9 @@ export function PlasgosWebchat(props: PlasgosWebchatProps): null {
         } else if (!identityToken && previousToken.current) {
             client.shutdown();
             void loadWebchat(optionsRef.current);
+        } else if (identityToken === null && previousToken.current === undefined) {
+            // Halaman pertama tanpa pengguna (logout lewat redirect/SSR): sesi hasil login sebelumnya diakhiri.
+            client.identify(null);
         }
         previousToken.current = identityToken;
     }, [identityToken]);

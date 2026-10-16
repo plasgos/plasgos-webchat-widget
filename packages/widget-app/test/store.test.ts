@@ -18,11 +18,22 @@ function visitorMessage(patch: Partial<ChatMessage> = {}): ChatMessage {
 }
 
 describe('penggabungan pesan', () => {
-    it('pesan optimistis & versi server (client_message_id sama) menjadi SATU pesan', () => {
-        const merged = upsertMessages([visitorMessage()], [visitorMessage({ id: 'wcm_1', status: 'accepted', timestamp: '2026-10-14T10:00:01.000Z' })]);
+    it('pesan optimistis & versi server (client_message_id sama) menjadi SATU pesan berwaktu SERVER', () => {
+        const merged = upsertMessages([visitorMessage({ local: true })], [visitorMessage({ id: 'wcm_1', status: 'accepted', timestamp: '2026-10-14T10:00:01.000Z' })]);
 
         expect(merged).toHaveLength(1);
-        expect(merged[0]).toMatchObject({ id: 'wcm_1', status: 'accepted', timestamp: '2026-10-14T10:00:00.000Z' });
+        expect(merged[0]).toMatchObject({ id: 'wcm_1', status: 'accepted', timestamp: '2026-10-14T10:00:01.000Z', local: false });
+    });
+
+
+    it('jam perangkat yang maju tak menimpa waktu server & tak jadi kursor `after` (balasan tak terlewati)', () => {
+        const server = visitorMessage({ id: 'wcm_1', status: 'accepted', timestamp: '2026-10-14T10:00:01.000Z' });
+        const fromOtherTab = visitorMessage({ id: 'wcm_1', status: 'accepted', timestamp: '2026-10-14T10:07:00.000Z', local: true });
+        const merged = upsertMessages([server], [fromOtherTab]);
+        expect(merged[0]?.timestamp).toBe('2026-10-14T10:00:01.000Z');
+
+        const optimistic = visitorMessage({ id: 'wcm_2', client_message_id: 'c-2', status: 'accepted', timestamp: '2026-10-14T10:09:00.000Z', local: true });
+        expect(lastServerTimestamp([server, optimistic])).toBe('2026-10-14T10:00:01.000Z');
     });
 
 

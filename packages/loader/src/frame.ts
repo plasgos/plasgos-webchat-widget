@@ -59,6 +59,9 @@ export class FrameHost {
         this.iframe = doc.createElement('iframe');
         this.iframe.src = config.src;
         this.iframe.title = config.title;
+        // Origin website sampai ke iframe walau halaman ber-`Referrer-Policy: no-referrer` (browser tanpa
+        // `location.ancestorOrigins`, mis. Firefox, membaca origin induk dari `document.referrer`).
+        this.iframe.referrerPolicy = 'strict-origin';
         setStyles(this.root, {
             position: 'fixed',
             display: 'none',

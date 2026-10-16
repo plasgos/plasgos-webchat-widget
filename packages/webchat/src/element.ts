@@ -9,7 +9,7 @@
  * PROPERTI yang dicerminkan (`widgetId`, `identityToken`, `locale`) — Solid & React 19 mengisi properti elemen kustom,
  * bukan atribut. Mengimpor modul ini mendaftarkan elemen (aman SSR: di server tak berbuat apa-apa).
  */
-import { client, isBrowser, loadWebchat } from './index';
+import { client, isBrowser, isTrustedPlasgosUrl, loadWebchat } from './index';
 import type { WebchatOptions } from './index';
 
 export const ELEMENT_NAME = 'plasgos-webchat';
@@ -28,9 +28,22 @@ function optionsOf(element: HTMLElement): WebchatOptions | null {
         ...(element.hasAttribute('hide-launcher') ? { hideLauncher: true } : {}),
         ...(load === 'idle' || load === 'interaction' || load === 'eager' ? { load } : {}),
         ...(attribute('identity-token') ? { identityToken: attribute('identity-token') ?? '' } : {}),
-        ...(attribute('loader-url') ? { loaderUrl: attribute('loader-url') ?? '' } : {}),
-        ...(attribute('widget-origin') ? { widgetOrigin: attribute('widget-origin') ?? '' } : {}),
+        // Atribut bisa datang dari HTML yang disisipkan penyerang — hanya host Plasgos / origin halaman / loopback
+        // yang diterima (`isTrustedPlasgosUrl`, ditegakkan lagi saat loader dipasang).
+        ...(trusted(attribute('loader-url')) ? { loaderUrl: attribute('loader-url') ?? '' } : {}),
+        ...(trusted(attribute('widget-origin')) ? { widgetOrigin: attribute('widget-origin') ?? '' } : {}),
     };
+}
+
+function trusted(value: string | null): boolean {
+    if (!value) {
+        return false;
+    }
+    if (!isTrustedPlasgosUrl(value, window.location.origin)) {
+        console.warn(`[Plasgos Webchat] <${ELEMENT_NAME}> mengabaikan URL di luar Plasgos: ${value}`);
+        return false;
+    }
+    return true;
 }
 
 /** Daftarkan `<plasgos-webchat>` sekali; dipanggil otomatis saat modul diimpor di peramban. */

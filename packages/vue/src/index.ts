@@ -48,6 +48,7 @@ function createHandle(options: WebchatOptions): WebchatHandle {
     const client = getWebchat();
     const state = ref<WebchatState>({ ...EMPTY_STATE });
     let identity: string | null = options.identityToken ?? null;
+    let signedOutDeclared = options.identityToken === null;
     if (isBrowser()) {
         for (const event of STATE_EVENTS) {
             client.on(event, () => {
@@ -64,7 +65,11 @@ function createHandle(options: WebchatOptions): WebchatHandle {
             } else if (!token && identity) {
                 client.shutdown();
                 void loadWebchat(withoutIdentity(options));
+            } else if (token === null && !signedOutDeclared) {
+                // Halaman pertama tanpa pengguna (logout lewat redirect/SSR): sesi hasil login sebelumnya diakhiri.
+                client.identify(null);
             }
+            signedOutDeclared = token === null;
             identity = token;
         },
     };

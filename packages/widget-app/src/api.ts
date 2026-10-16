@@ -106,7 +106,8 @@ export class PublicApi {
 
 
     public shutdown(token: string): Promise<unknown> {
-        return this.request('POST', '/sessions/shutdown', { token });
+        // `keepalive`: iframe dicabut loader ±500 ms setelah perintah — pencabutan sesi di server tak boleh terputus.
+        return this.request('POST', '/sessions/shutdown', { token, keepalive: true });
     }
 
 

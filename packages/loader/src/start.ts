@@ -22,7 +22,10 @@ function originOf(value: string | undefined): string | null {
 
     try {
         const url = new URL(value);
-        return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : null;
+        // http hanya untuk loopback (pengembangan): di produksi token identitas & perintah tak boleh lewat teks polos.
+        return url.protocol === 'https:' || (url.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(url.hostname))
+            ? url.origin
+            : null;
     } catch {
         return null;
     }
@@ -43,7 +46,7 @@ export function start(win: Window, doc: Document): void {
     const override = script?.dataset['widgetOrigin'];
     const widgetOrigin = originOf(override) ?? __WIDGET_ORIGIN__;
     if (override && !originOf(override)) {
-        warn(`data-widget-origin "${override}" bukan origin http(s) — memakai ${widgetOrigin}`);
+        warn(`data-widget-origin "${override}" bukan origin https — memakai ${widgetOrigin}`);
     }
 
     const controller = new WebchatController({ window: win, document: doc, widgetOrigin });

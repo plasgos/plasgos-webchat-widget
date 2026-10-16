@@ -275,6 +275,10 @@ export function replyEstimateText(locale: Locale, minutes: number): string {
         : translate(locale, 'replyEstimateMinutes', { minutes: Math.max(1, Math.round(minutes)) });
 }
 
-export function resolveLocale(preferred: string | undefined, fallback: Locale): Locale {
-    return preferred === 'id' || preferred === 'en' ? preferred : fallback;
+export function resolveLocale(preferred: string | undefined, fallback: string): Locale {
+    if (preferred === 'id' || preferred === 'en') {
+        return preferred;
+    }
+    // Bahasa baru dari server (kompatibilitas ke depan) tak boleh membuat render melempar — kembali ke `id`.
+    return fallback === 'en' ? 'en' : 'id';
 }

@@ -38,12 +38,15 @@ export class PlasgosWebchatService implements WebchatClient {
 
     private identity: string | null;
 
+    private signedOutDeclared: boolean;
+
     /** Keadaan widget (terbuka, belum dibaca, …) sebagai signal. */
     public readonly state: Signal<WebchatState> = this.stateSignal.asReadonly();
 
 
     public constructor(private readonly zone: ZoneLike, private readonly options: WebchatOptions) {
         this.identity = options.identityToken ?? null;
+        this.signedOutDeclared = options.identityToken === null;
     }
 
 
@@ -128,7 +131,11 @@ export class PlasgosWebchatService implements WebchatClient {
             const anonymous: { -readonly [K in keyof WebchatOptions]: WebchatOptions[K] } = { ...this.options };
             delete anonymous.identityToken;
             this.zone.runOutsideAngular(() => void loadWebchat(anonymous));
+        } else if (token === null && !this.signedOutDeclared) {
+            // Halaman pertama tanpa pengguna (logout lewat redirect/SSR): sesi hasil login sebelumnya diakhiri.
+            this.client.identify(null);
         }
+        this.signedOutDeclared = token === null;
         this.identity = token;
     }
 }

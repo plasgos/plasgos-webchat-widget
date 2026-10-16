@@ -365,9 +365,11 @@ export class ChatView {
         this.teamStatus.hidden = teamStatus === null;
         this.teamStatus.dataset['online'] = String(teamStatus?.online === true);
         this.teamStatus.textContent = teamStatus?.text ?? '';
-        this.logo.hidden = !look.logo_url;
-        if (look.logo_url && this.logo.src !== look.logo_url) {
-            this.logo.src = look.logo_url;
+        // Logo hanya https (pengaturan admin tenant; pertahanan berlapis selain validasi server).
+        const logoUrl = typeof look.logo_url === 'string' && /^https:/i.test(look.logo_url) ? look.logo_url : null;
+        this.logo.hidden = logoUrl === null;
+        if (logoUrl && this.logo.src !== logoUrl) {
+            this.logo.src = logoUrl;
         }
         this.closeButton.setAttribute('aria-label', t('closeChat'));
         // Transkrip hanya bila sudah ada percakapan (W5c).
@@ -415,7 +417,8 @@ export class ChatView {
         this.handoffEntry.hidden = !handoffOffered(state);
         this.handoffEntry.disabled = state.handoffBusy;
         this.handoffEntry.textContent = t(state.handoffBusy ? 'handoffBusy' : 'handoffOpen');
-        const whatsappUrl = state.config?.whatsapp?.enabled ? state.whatsappUrl : null;
+        // Hanya tautan `https://wa.me/` (dibuat server) — pertahanan berlapis.
+        const whatsappUrl = state.config?.whatsapp?.enabled && state.whatsappUrl?.startsWith('https://wa.me/') ? state.whatsappUrl : null;
         this.whatsappEntry.hidden = whatsappUrl === null;
         if (whatsappUrl) {
             this.whatsappEntry.href = whatsappUrl;

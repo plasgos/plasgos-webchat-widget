@@ -9,7 +9,9 @@
  *   - `exit_intent`   : kursor keluar lewat tepi atas (desktop, sinyal loader);
  *   - `event`         : `Plasgos('track', event)`.
  * Satu aturan diminta paling banyak sekali per halaman. Begitu satu pesan tampil — atau pengunjung sudah bercakap —
- * mesin berhenti meminta (server tetap penjaga terakhir).
+ * mesin berhenti meminta (server tetap penjaga terakhir). Pemicu yang terpenuhi saat permintaan lain berjalan
+ * diantrekan (dulu dibuang untuk halaman itu); konfigurasi yang dibaca ulang TANPA perubahan aturan tak mengulang
+ * penghitung (dulu `time_on_page` > 5 menit tak pernah terpicu). Sesi pengunjung baru → `reset()`.
  */
 
 export type ProactiveTrigger =
@@ -38,6 +40,8 @@ export class ProactiveEngine {
     private active = false;
     private done = false;
     private inFlight = false;
+    private queued: ProactiveRule[] = [];
+    private rulesKey = '[]';
     private readonly schedule: (callback: () => void, ms: number) => unknown;
     private readonly cancel: (handle: unknown) => void;
 
@@ -52,7 +56,13 @@ export class ProactiveEngine {
 
     /** Aturan dari konfigurasi publik (hanya pemicu). Diganti saat konfigurasi dibaca ulang. */
     public setRules(rules: readonly ProactiveRule[]): void {
-        this.rules = rules.filter(isRule);
+        const next = rules.filter(isRule);
+        const key = JSON.stringify(next);
+        if (key === this.rulesKey) {
+            return;
+        }
+        this.rules = next;
+        this.rulesKey = key;
         if (this.active) {
             this.page();
         }
@@ -69,11 +79,20 @@ export class ProactiveEngine {
     }
 
 
-    /** Berhenti selamanya (pesan sudah tampil / pengunjung bercakap / sesi berakhir). */
+    /** Berhenti untuk pengunjung ini (pesan sudah tampil / pengunjung bercakap / sesi berakhir). */
     public stop(): void {
         this.done = true;
         this.active = false;
+        this.queued = [];
         this.clearTimers();
+    }
+
+
+    /** Pengunjung baru (logout → sesi anonim baru): boleh dimulai lagi. Dulu `stop()` berlaku selamanya. */
+    public reset(): void {
+        this.stop();
+        this.done = false;
+        this.requested = new Set();
     }
 
 
@@ -84,6 +103,7 @@ export class ProactiveEngine {
         }
         this.clearTimers();
         this.requested = new Set();
+        this.queued = [];
         for (const rule of this.rules) {
             if (rule.trigger.type === 'page_load') {
                 this.fire(rule);
@@ -121,8 +141,14 @@ export class ProactiveEngine {
 
 
     private fire(rule: ProactiveRule): void {
-        // Satu permintaan pada satu waktu: pemicu yang terpenuhi bersamaan tak membuat klaim beruntun.
-        if (!this.active || this.inFlight || this.requested.has(rule.rule_id)) {
+        if (!this.active || this.requested.has(rule.rule_id)) {
+            return;
+        }
+        // Satu permintaan pada satu waktu: pemicu yang terpenuhi bersamaan diantrekan, diminta setelah yang berjalan.
+        if (this.inFlight) {
+            if (!this.queued.some((queued) => queued.rule_id === rule.rule_id)) {
+                this.queued.push(rule);
+            }
             return;
         }
         this.requested.add(rule.rule_id);
@@ -136,6 +162,10 @@ export class ProactiveEngine {
             .catch(() => undefined)
             .finally(() => {
                 this.inFlight = false;
+                const next = this.queued.shift();
+                if (next) {
+                    this.fire(next);
+                }
             });
     }
 

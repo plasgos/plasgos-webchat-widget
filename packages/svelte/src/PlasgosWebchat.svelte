@@ -15,14 +15,15 @@
 
     /** `undefined` eksplisit diterima: di template, `identityToken={sesi?.token}` adalah pola yang umum. */
     interface Props extends Omit<WebchatOptions, 'identityToken'> {
-        readonly identityToken?: string | undefined;
+        /** `null` = tak ada yang login (halaman pertama setelah logout lewat redirect). */
+        readonly identityToken?: string | null | undefined;
         readonly pathname?: string | null | undefined;
     }
 
     const { identityToken, pathname: rawPathname, ...widget }: Props = $props();
     const pathname = $derived(rawPathname ?? undefined);
 
-    let previousToken: string | undefined = undefined;
+    let previousToken: string | null | undefined = undefined;
     // Nilai AWAL sengaja (pembanding navigasi berikutnya).
     let previousPath: string | undefined = untrack(() => pathname);
 
@@ -44,6 +45,9 @@
         } else if (!token && previousToken) {
             client.shutdown();
             void loadWebchat(bootOptions());
+        } else if (token === null && previousToken === undefined) {
+            // Halaman pertama tanpa pengguna (logout lewat redirect/SSR): sesi hasil login sebelumnya diakhiri.
+            client.identify(null);
         }
         previousToken = token;
     });

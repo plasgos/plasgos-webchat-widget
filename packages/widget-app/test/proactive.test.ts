@@ -76,4 +76,42 @@ describe('pemicu pesan proaktif (W8b)', () => {
         instance.start();
         expect(timers).toHaveLength(0);
     });
+    it('audit 2026-10-16: pemicu saat klaim lain berjalan diantrekan, bukan dibuang', async () => {
+        const { instance, claims } = engine();
+        instance.setRules([rule('prr_a', { type: 'page_load' }), rule('prr_b', { type: 'page_load' })]);
+        instance.start();
+        await flush();
+        await flush();
+        expect(claims).toEqual(['prr_a', 'prr_b']);
+    });
+
+
+    it('audit 2026-10-16: konfigurasi dibaca ulang tanpa perubahan aturan → penghitung TIDAK diulang', () => {
+        const { instance, timers } = engine();
+        const rules = [rule('prr_a', { type: 'time_on_page', seconds: 600 })];
+        instance.setRules(rules);
+        instance.start();
+        const first = timers[0];
+        instance.setRules([...rules]);
+        expect(timers).toEqual([first]);
+        instance.setRules([rule('prr_a', { type: 'time_on_page', seconds: 60 })]);
+        expect(timers.map((t) => t.ms)).toEqual([60_000]);
+    });
+
+
+    it('audit 2026-10-16: pengunjung baru (reset) boleh dimulai lagi setelah stop', async () => {
+        const { instance, claims } = engine();
+        instance.setRules([rule('prr_a', { type: 'page_load' })]);
+        instance.start();
+        await flush();
+        instance.stop();
+        instance.start();
+        await flush();
+        expect(claims).toEqual(['prr_a']);
+        instance.reset();
+        instance.start();
+        await flush();
+        expect(claims).toEqual(['prr_a', 'prr_a']);
+    });
+
 });

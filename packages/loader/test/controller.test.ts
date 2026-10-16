@@ -251,6 +251,33 @@ describe('controller loader', () => {
     });
 
 
+    it('audit H2: shutdown SEBELUM iframe siap → iframe berikutnya diminta membuang sesi tersimpan (resetSession)', () => {
+        const webchat = controller();
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'interaction' }]);
+        webchat.handle('shutdown', []);
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager' }]);
+        vi.advanceTimersByTime(10);
+        const posted = vi.spyOn(iframes()[0]?.contentWindow as Window, 'postMessage').mockImplementation(() => undefined);
+        fromWidget(createMessage('widget.ready', {}));
+        expect(posted.mock.calls[0]?.[0]).toMatchObject({ type: 'host.init', payload: { resetSession: true } });
+    });
+
+
+    it('audit M1: halaman dilaporkan tanpa fragmen (#access_token alur OAuth tak meninggalkan website)', () => {
+        window.history.replaceState(null, '', '/masuk?next=/akun#access_token=RAHASIA');
+        const webchat = controller();
+        webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager' }]);
+        vi.advanceTimersByTime(10);
+        const posted = vi.spyOn(iframes()[0]?.contentWindow as Window, 'postMessage').mockImplementation(() => undefined);
+        fromWidget(createMessage('widget.ready', {}));
+        const init = posted.mock.calls[0]?.[0] as { payload: { page: { url: string } } };
+        expect(init.payload.page.url).not.toContain('RAHASIA');
+        expect(init.payload.page.url).toContain('/masuk?next=/akun');
+        expect(iframes()[0]?.referrerPolicy).toBe('strict-origin');
+        window.history.replaceState(null, '', '/');
+    });
+
+
     it('shutdown memberi tahu iframe lalu melepas widget; boot berikutnya membuat iframe baru', () => {
         const webchat = controller();
         webchat.handle('boot', [{ widgetId: WIDGET_ID, load: 'eager' }]);

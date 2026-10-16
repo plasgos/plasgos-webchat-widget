@@ -1,10 +1,7 @@
 /** Jeda sebelum melapor: router SPA umumnya memperbarui `document.title` sesaat SETELAH URL berubah. */
 const SETTLE_MS = 250;
 
-const WRAPPED = '__plasgosWebchatWrapped';
-
 type HistoryMethod = 'pushState' | 'replaceState';
-type Wrappable = History[HistoryMethod] & { [WRAPPED]?: true };
 type NavigationLike = { addEventListener: EventTarget['addEventListener']; removeEventListener: EventTarget['removeEventListener'] };
 
 function navigationApiOf(win: Window): NavigationLike | null {
@@ -23,7 +20,9 @@ function navigationApiOf(win: Window): NavigationLike | null {
  * yang dilaporkan. Mengembalikan fungsi berhenti.
  */
 export function watchNavigation(win: Window, onChange: () => void): () => void {
-    let lastHref = win.location.href;
+    // Fragmen tak dihitung: tautan jangkar di halaman yang sama bukan halaman baru (fragmen juga tak dilaporkan).
+    const pageOf = (): string | undefined => win.location.href.split('#')[0];
+    let lastHref = pageOf();
     let active = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -33,7 +32,7 @@ export function watchNavigation(win: Window, onChange: () => void): () => void {
         }
         timer = setTimeout(() => {
             timer = null;
-            const href = win.location.href;
+            const href = pageOf();
             if (active && href !== lastHref) {
                 lastHref = href;
                 onChange();
@@ -65,20 +64,16 @@ export function watchNavigation(win: Window, onChange: () => void): () => void {
         win.removeEventListener('popstate', check);
         win.removeEventListener('hashchange', check);
         // Pembungkus history TIDAK dilepas: pustaka lain bisa sudah membungkus di atasnya; `active` mematikannya.
+        // Watcher berikutnya (shutdown → boot) membungkus lagi di atasnya — dulu pembungkus lama menolak dibungkus
+        // ulang sehingga navigasi SPA tak lagi dilaporkan setelah logout/ganti widget.
     };
 }
 
 function wrapHistory(history: History, method: HistoryMethod, after: () => void): void {
     // Diambil sebagai fungsi lepas untuk dibungkus berantai; dipanggil kembali dengan `this` = history.
-    const original = Reflect.get(history, method) as Wrappable;
-    if (original[WRAPPED]) {
-        return;
-    }
-
-    const wrapped: Wrappable = function (this: History, ...args: Parameters<History[HistoryMethod]>): void {
+    const original = Reflect.get(history, method);
+    history[method] = function (this: History, ...args: Parameters<History[HistoryMethod]>): void {
         original.apply(this, args);
         after();
     };
-    wrapped[WRAPPED] = true;
-    history[method] = wrapped;
 }

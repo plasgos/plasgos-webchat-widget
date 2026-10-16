@@ -23,9 +23,8 @@ function widgetIdOf(doc: Document): string | null {
 function boot(win: Window, doc: Document, widgetId: string): void {
     const container = doc.getElementById(ROOT_ID) ?? doc.body;
     const parentOrigin = parentOriginOf(win, doc);
-    const embedded = win.parent !== win && parentOrigin !== null;
 
-    if (!embedded) {
+    if (win.parent === win) {
         // Dibuka langsung (halaman penuh / WebView): tanpa loader, jendela chat langsung terbuka.
         const host: HostPort = { frame: () => undefined, state: () => undefined, event: () => undefined };
         const page = stripIdentityFragment(win.location, (url) => {
@@ -44,6 +43,13 @@ function boot(win: Window, doc: Document, widgetId: string): void {
             app.command(command);
         }));
         app.openStandalone();
+        return;
+    }
+
+    if (parentOrigin === null) {
+        // Di dalam iframe tetapi origin website tak diketahui: BUKAN halaman penuh — dulu widget berjalan "mandiri"
+        // tersembunyi di iframe (sesi & kuota terbuang). Loader menyematkan dengan referrerPolicy `strict-origin`.
+        console.warn('[Plasgos Webchat] origin website tak diketahui (Referrer-Policy?) — widget tak dimulai');
         return;
     }
 

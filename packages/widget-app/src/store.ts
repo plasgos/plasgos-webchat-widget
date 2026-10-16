@@ -173,7 +173,12 @@ function sameMessage(a: ChatMessage, b: ChatMessage): boolean {
 function merge(current: ChatMessage, incoming: ChatMessage): ChatMessage {
     // Pesan yang sudah gagal dikirim boleh hidup lagi (kirim ulang) — selain itu status hanya maju.
     const status = current.status === 'failed' || rank(incoming.status) >= rank(current.status) ? incoming.status : current.status;
-    return { ...current, ...incoming, id: incoming.id ?? current.id, status, timestamp: current.timestamp };
+    // Waktu server menggantikan waktu jam perangkat (pesan optimistis): jam perangkat yang maju dulu membuat urutan
+    // salah, kursor `after` melompati balasan, dan tanda "dibaca" tak pernah diterapkan.
+    const fromServer = incoming.local !== true;
+    const timestamp = fromServer ? incoming.timestamp : current.timestamp;
+    const local = fromServer ? false : current.local === true;
+    return { ...current, ...incoming, id: incoming.id ?? current.id, status, timestamp, local };
 }
 
 /** Gabungkan pesan (riwayat, socket, optimistis, tab lain) — tanpa duplikat, urut waktu. */
@@ -221,7 +226,7 @@ export function applyInboundStatus(
 export function lastServerTimestamp(list: readonly ChatMessage[]): string | null {
     for (let index = list.length - 1; index >= 0; index -= 1) {
         const message = list[index] as ChatMessage;
-        if (message.id !== null && message.status !== 'pending' && message.status !== 'failed') {
+        if (message.id !== null && message.local !== true && message.status !== 'pending' && message.status !== 'failed') {
             return message.timestamp;
         }
     }

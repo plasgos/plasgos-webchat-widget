@@ -144,6 +144,14 @@ export class SessionManager {
     }
 
 
+    /** Lepas sesi di memori SAJA (tab lain sudah membersihkan storage & mungkin sudah menyimpan sesi barunya). */
+    public forget(): void {
+        this.accessToken = null;
+        this.expiresAt = 0;
+        this.session = null;
+    }
+
+
     public clear(): void {
         this.deps.storage.remove(this.deps.refreshKey);
         this.accessToken = null;

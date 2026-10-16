@@ -215,6 +215,11 @@ export interface ChatMessage {
     readonly actions?: MessageActions | null;
     /** Pesan lokasi (W7b). */
     readonly location?: MessageLocation | null;
+    /**
+     * Waktu `timestamp` masih dari jam PERANGKAT (pesan optimistis / dari tab lain) — diganti waktu server begitu
+     * pesan itu datang dari server; tak pernah dipakai sebagai kursor `after`.
+     */
+    readonly local?: boolean;
 }
 
 export interface MessageActionItem {

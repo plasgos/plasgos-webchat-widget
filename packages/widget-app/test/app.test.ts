@@ -868,6 +868,79 @@ describe('aplikasi widget (iframe)', () => {
     });
 
 
+    it('audit H1: logout website → tautan WhatsApp berkode & status tersambung milik pengunjung sebelumnya dikosongkan', async () => {
+        whatsappEnabled = true;
+        bootSession = { trust_level: 'verified', verification_method: 'identity_token' };
+        const { app, container } = await startApp();
+        app.command({ name: 'open', args: [] });
+        await settle();
+        socket.serverEmit('whatsapp.linked', { phone_masked: '+62 812-****-4321', at: '2026-10-15T10:00:00.000Z' });
+        await settle();
+        bootSession = {};
+        app.command({ name: 'identify', args: [{ token: null }] });
+        await settle();
+        await settle();
+        app.command({ name: 'open', args: [] });
+        await settle();
+        const entry = container.querySelector<HTMLAnchorElement>('.pw-whatsapp');
+        expect(sent.filter((e) => e.url.endsWith('/whatsapp-link'))).toHaveLength(2);
+        expect(entry?.textContent).not.toContain('4321');
+    });
+
+
+    it('audit H4: logout di tab lain → tab ini TAK menghapus refresh token baru tab itu & memulai sesi lagi (bukan zombi)', async () => {
+        const { app } = await startApp();
+        localStorage.setItem(`plasgos_webchat:${WIDGET_ID}:refresh`, 'rt-tab-lain');
+        sent.length = 0;
+        (app as unknown as { onTabMessage(message: { type: string }): void }).onTabMessage({ type: 'shutdown' });
+        expect(localStorage.getItem(`plasgos_webchat:${WIDGET_ID}:refresh`)).toBe('rt-tab-lain');
+        await new Promise((resolve) => setTimeout(resolve, 1300));
+        await settle();
+        const boot = sent.find((e) => e.url.endsWith('/sessions'));
+        expect(boot?.body).toMatchObject({ refresh_token: 'rt-tab-lain' });
+    });
+
+
+    it('audit M1: tanda sampai beruntun dijarangkan ≥1 dtk — yang terakhir tetap terkirim (dulu dibuang server)', async () => {
+        await startApp();
+        socket.emitted.length = 0;
+        const reply = (id: string, at: string) => ({ conversation_id: 'cv_1', message: { id, client_message_id: null, direction: 'outbound', sender: { kind: 'ai', name: 'AI' }, type: 'text', text: id, status: 'sent', timestamp: at } });
+        socket.serverEmit('message.created', reply('wco_1', '2026-10-14T10:00:00.000Z'));
+        socket.serverEmit('message.created', reply('wco_2', '2026-10-14T10:00:01.000Z'));
+        socket.serverEmit('message.created', reply('wco_3', '2026-10-14T10:00:02.000Z'));
+        expect(socket.emitted.filter((e) => e.name === 'delivered')).toHaveLength(1);
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        const delivered = socket.emitted.filter((e) => e.name === 'delivered');
+        expect(delivered).toHaveLength(2);
+        expect(delivered[1]?.payload).toEqual({ up_to: '2026-10-14T10:00:02.000Z' });
+    });
+
+
+    it('audit H3: socket ditolak alasan lain (rate_limited) → disambung ulang dengan jeda, bukan mati permanen', async () => {
+        await startApp();
+        let connects = 0;
+        const original = socket.fake.connect;
+        socket.fake.connect = () => { connects += 1; return socket.fake; };
+        (socket.fake as unknown as { active: boolean }).active = false;
+        socket.serverEmit('connect_error', Object.assign(new Error('x'), { data: { reason: 'rate_limited' } }));
+        await new Promise((resolve) => setTimeout(resolve, 2100));
+        expect(connects).toBe(1);
+        socket.fake.connect = original;
+    });
+
+
+    it('audit M10: conversation_started sekali saat percakapan pertama lahir; lead_captured setelah pre-chat', async () => {
+        prechatConfig = { mode: 'optional', fields: [{ key: 'name', type: 'text', label: 'Nama', required: true, options: [] }] };
+        const { app, port } = await startApp();
+        await (app as unknown as { submitPrechat(values: Record<string, string>): Promise<void> }).submitPrechat({ name: 'Budi' });
+        expect(port.events.filter((e) => e.name === 'lead_captured')).toEqual([{ name: 'lead_captured', data: { source: 'prechat' } }]);
+        socket.serverEmit('message.status', { conversation_id: 'cv_9', direction: 'inbound', message_id: null, client_message_id: null, status: 'delivered', up_to_at: null });
+        socket.serverEmit('message.created', { conversation_id: 'cv_9', message: { id: 'wco_9', client_message_id: null, direction: 'outbound', sender: { kind: 'agent', name: 'Rina' }, type: 'text', text: 'Halo', status: 'sent', timestamp: '2026-10-14T10:00:00.000Z' } });
+        await settle();
+        expect(port.events.filter((e) => e.name === 'conversation_started')).toHaveLength(1);
+    });
+
+
     it('Lanjutkan di WhatsApp (W8d): tautan disiapkan saat jendela dibuka; tersambung → teks berubah; fitur mati → tak tampil', async () => {
         whatsappEnabled = true;
         const { app, container } = await startApp();

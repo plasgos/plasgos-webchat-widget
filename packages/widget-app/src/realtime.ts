@@ -48,9 +48,19 @@ export interface RealtimeHandlers {
     readonly onTokenStale: () => void;
 }
 
+interface SpacedEvent {
+    lastSentAt: number;
+    timer: ReturnType<typeof setTimeout> | null;
+    payload: unknown;
+}
+
 /** Penolakan yang tak akan berubah dengan mencoba lagi. */
 const PERMANENT_REJECTIONS = ['session_revoked', 'visitor_blocked', 'widget_unavailable', 'webchat_unavailable'];
 const TOKEN_REJECTIONS = ['token_expired', 'token_invalid', 'token_missing'];
+/** Jeda sambung ulang setelah penolakan lain (batas laju, gangguan server) — socket.io tak menyambung sendiri. */
+const REJECTION_RETRY_MS = [2000, 5000, 15000, 30000];
+/** Server menolak `delivered`/`read` yang datang < 1 dtk setelah sebelumnya (`throttled`) — dikirim di ujung jeda. */
+const CLIENT_EVENT_SPACING_MS = 1100;
 
 /**
  * Koneksi realtime pengunjung. `auth` berupa FUNGSI: setiap (sambung ulang) membaca token akses terbaru, sehingga
@@ -60,6 +70,12 @@ export class Realtime {
     private socket: Socket<ServerEvents, ClientEvents> | null = null;
 
     private everConnected = false;
+
+    private retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    private retryAttempt = 0;
+
+    private readonly spaced = new Map<string, SpacedEvent>();
 
 
     public constructor(
@@ -85,6 +101,7 @@ export class Realtime {
             withCredentials: false,
         });
         socket.on('connect', () => {
+            this.retryAttempt = 0;
             this.handlers.onConnected(this.everConnected);
             this.everConnected = true;
         });
@@ -103,6 +120,12 @@ export class Realtime {
             } else if (reason && TOKEN_REJECTIONS.includes(reason)) {
                 socket.disconnect();
                 this.handlers.onTokenStale();
+            } else if (!socket.active) {
+                // Ditolak middleware dengan alasan lain (`rate_limited`, `auth_unavailable`, …): socket.io
+                // menghancurkan
+                // socket tanpa menyambung ulang — dulu balasan tak pernah tiba sampai halaman dimuat ulang.
+                const retryAfter = Number((error.data as { retry_after?: unknown } | undefined)?.retry_after);
+                this.scheduleRetry(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : null);
             }
         });
         const events = [
@@ -119,12 +142,20 @@ export class Realtime {
 
 
     public reconnect(): void {
+        this.clearRetry();
         this.socket?.disconnect();
         this.socket?.connect();
     }
 
 
     public disconnect(): void {
+        this.clearRetry();
+        for (const entry of this.spaced.values()) {
+            if (entry.timer !== null) {
+                clearTimeout(entry.timer);
+            }
+        }
+        this.spaced.clear();
         this.socket?.disconnect();
     }
 
@@ -139,5 +170,56 @@ export class Realtime {
             return;
         }
         (this.socket.emit as (event: string, data: unknown, ack: () => void) => void)(name, payload, () => undefined);
+    }
+
+
+    /**
+     * Sinyal yang dijarangkan server (`delivered`, `read`: 1×/dtk): dikirim segera bila jedanya cukup, selain itu
+     * SEKALI di ujung jeda dengan muatan terbaru — dulu sinyal kedua dibuang server sehingga pesan terakhir tetap
+     * "belum dibaca".
+     */
+    public emitSpaced<K extends keyof ClientEvents>(
+        name: K,
+        payload: Parameters<ClientEvents[K]>[0],
+        now = Date.now(),
+    ): void {
+        const entry = this.spaced.get(name) ?? { lastSentAt: 0, timer: null, payload: null };
+        this.spaced.set(name, entry);
+        entry.payload = payload;
+        if (entry.timer !== null) {
+            return;
+        }
+        const wait = entry.lastSentAt + CLIENT_EVENT_SPACING_MS - now;
+        const fire = (): void => {
+            entry.timer = null;
+            entry.lastSentAt = Date.now();
+            this.emit(name, entry.payload as Parameters<ClientEvents[K]>[0]);
+        };
+        if (wait <= 0) {
+            fire();
+        } else {
+            entry.timer = setTimeout(fire, wait);
+        }
+    }
+
+
+    private scheduleRetry(afterMs: number | null): void {
+        if (this.retryTimer !== null) {
+            return;
+        }
+        const step = REJECTION_RETRY_MS[Math.min(this.retryAttempt, REJECTION_RETRY_MS.length - 1)] ?? 30000;
+        this.retryAttempt += 1;
+        this.retryTimer = setTimeout(() => {
+            this.retryTimer = null;
+            this.socket?.connect();
+        }, Math.max(afterMs ?? 0, step));
+    }
+
+
+    private clearRetry(): void {
+        if (this.retryTimer !== null) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = null;
+        }
     }
 }

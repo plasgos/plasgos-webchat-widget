@@ -65,6 +65,9 @@ export class WebchatController {
 
     private ready = false;
 
+    /** `shutdown` sebelum iframe siap → iframe berikutnya membuang sesi tersimpan (`host.init.resetSession`). */
+    private resetSessionOnInit = false;
+
     private state: WebchatState = INITIAL_STATE;
 
     private outbox: ProtocolMessage<HostMessageType>[] = [];
@@ -298,7 +301,9 @@ export class WebchatController {
             options: boot.widget,
             page: this.currentPage(),
             hostOrigin: this.env.window.location.origin,
+            resetSession: this.resetSessionOnInit,
         }));
+        this.resetSessionOnInit = false;
         this.postViewport();
         const pending = this.outbox;
         this.outbox = [];
@@ -390,6 +395,10 @@ export class WebchatController {
 
         if (this.ready) {
             this.post(createMessage('host.command', { name: 'shutdown', args: [] }));
+        } else {
+            // Iframe belum siap (mode interaction/idle, logout tepat setelah halaman dimuat): iframe berikutnya diminta
+            // membuang sesi tersimpan — dulu perintah ini hilang dan sesi orang sebelumnya dilanjutkan.
+            this.resetSessionOnInit = true;
         }
         const frame = this.frame;
         this.frame = null;
@@ -480,9 +489,13 @@ export class WebchatController {
     }
 
 
+    /**
+     * Halaman yang dilaporkan ke Plasgos TANPA fragmen (`#access_token=…` alur OAuth/magic link) — rahasia website
+     * tenant tak meninggalkan halamannya. Parameter rahasia (`?token=`, `?code=`) dibuang server.
+     */
     private currentPage(): PageInfo {
         const { window: win, document: doc } = this.env;
-        return { url: win.location.href, title: doc.title, referrer: doc.referrer };
+        return { url: win.location.href.split('#')[0] ?? '', title: doc.title, referrer: doc.referrer };
     }
 
 
