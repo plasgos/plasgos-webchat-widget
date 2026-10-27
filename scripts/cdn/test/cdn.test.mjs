@@ -81,9 +81,9 @@ describe('rilis CDN berversi', () => {
 
     it('catatan rilis memuat SRI & snippet versi terkunci', async () => {
         const manifest = await deployRelease({ plan: await planOf('1.0.0'), target, log: quiet });
-        const notes = releaseNotes(manifest, 'https://cdn.plasgoschat.com/');
+        const notes = releaseNotes(manifest, 'https://cdn.plasgoschat.my.id/');
 
-        expect(notes).toContain(`src="https://cdn.plasgoschat.com/loader/1.0.0/loader.js" integrity="${manifest.files[0]?.sri ?? ''}" crossorigin="anonymous"`);
+        expect(notes).toContain(`src="https://cdn.plasgoschat.my.id/loader/1.0.0/loader.js" integrity="${manifest.files[0]?.sri ?? ''}" crossorigin="anonymous"`);
     });
 
     it('S3: tulis versi bersyarat (--if-none-match), alias copy-object berheader alias, invalidasi CloudFront', async () => {

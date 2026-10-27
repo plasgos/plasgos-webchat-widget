@@ -9,7 +9,7 @@
  *     (izinkan nama kebijakan itu di direktif CSP `trusted-types`).
  */
 
-export const DEFAULT_LOADER_URL = 'https://cdn.plasgoschat.com/loader/v1/loader.js';
+export const DEFAULT_LOADER_URL = 'https://cdn.plasgoschat.my.id/loader/v1/loader.js';
 
 export type Locale = 'id' | 'en';
 export type WebchatEventName =

@@ -68,7 +68,7 @@ async function main() {
             const plan = await currentPlan();
             const manifest = await deployRelease({ plan, target: target(), moveAlias: !values['no-alias'] });
             if (values.notes) {
-                writeFileSync(values.notes, releaseNotes(manifest, process.env.PLASGOS_CDN_ORIGIN ?? 'https://cdn.plasgoschat.com'));
+                writeFileSync(values.notes, releaseNotes(manifest, process.env.PLASGOS_CDN_ORIGIN ?? 'https://cdn.plasgoschat.my.id'));
                 console.info(`catatan rilis → ${values.notes}`);
             }
             return;
