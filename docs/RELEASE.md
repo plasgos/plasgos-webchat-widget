@@ -25,7 +25,7 @@ Loader membawa origin aplikasi widget yang ditanam saat build. Deploy menolak lo
 lain:
 
 ```bash
-PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.com pnpm build
+PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.my.id pnpm build
 pnpm size
 pnpm cdn plan            # cetak path & SRI yang akan terbit
 ```
@@ -33,7 +33,7 @@ pnpm cdn plan            # cetak path & SRI yang akan terbit
 ## Deploy
 
 ```bash
-PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.com PLASGOS_CDN_ORIGIN=https://cdn.plasgoschat.com \
+PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.my.id PLASGOS_CDN_ORIGIN=https://cdn.plasgoschat.my.id \
   pnpm cdn deploy --target s3://<bucket> --distribution <cloudfront-id> --notes release-notes/1.0.0.md
 ```
 
@@ -58,7 +58,8 @@ tetap ada untuk maju lagi.
 
 ## Penyiapan AWS (sekali per lingkungan)
 
-Menunggu domain widget dibeli (K1, nama kerja `plasgoschat.com`).
+Domain widget saat ini `plasgoschat.my.id` (K1): `cdn.plasgoschat.my.id` sudah diarahkan ke CloudFront,
+`widget.plasgoschat.my.id` belum.
 
 1. **S3** — bucket privat (Block Public Access menyala, tanpa website hosting, versioning menyala sebagai jaring
    pengaman), hanya CloudFront yang membaca lewat **Origin Access Control**.

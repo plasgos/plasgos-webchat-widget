@@ -48,7 +48,7 @@ Lighthouse mencari Chrome lewat `chrome-launcher` (`CHROME_PATH` bila perlu).
 Loader TIDAK memanggil API; ia hanya membuat iframe `${origin widget}/w/${widgetId}`. Origin itu ditanam saat build:
 
 ```bash
-PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.com pnpm build   # bawaan (produksi)
+PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.my.id pnpm build   # bawaan (produksi)
 PLASGOS_WIDGET_ORIGIN=https://widget.staging.example pnpm build   # lingkungan lain
 ```
 
