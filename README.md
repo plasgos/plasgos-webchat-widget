@@ -25,7 +25,7 @@ Widget yang sebenarnya selalu sama (aplikasi di iframe); yang berbeda per framew
 
 ## Pengembangan
 
-Prasyarat: Node ≥ 20, pnpm (versi dipin di `packageManager`, aktifkan dengan `corepack enable`).
+Prasyarat: Node `^22.22.3 || ^24.15.0 || >=26` (devDependency Angular 22; ditolak `engine-strict`), pnpm (versi dipin di `packageManager`, aktifkan dengan `corepack enable`).
 
 ```bash
 pnpm install

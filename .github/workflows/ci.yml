@@ -15,7 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: ["20", "22"]
+        # Rentang `engines` akar (devDependency Angular 22 mensyaratkan ^22.22.3 || ^24.15.0 || >=26).
+        node: ["22", "24"]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -32,6 +33,24 @@ jobs:
         run: pnpm size
       - name: Paket npm dapat diimpor di Node (ESM & CJS, SSR)
         run: pnpm --filter @plasgos/webchat smoke
+
+  consumer:
+    name: paket npm dapat diimpor di Node 20 (SSR situs tenant)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      # Toolchain build butuh Node ≥ 22.22.3; paket yang terbit dipakai di Node tenant yang lebih lama.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @plasgos/webchat build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node packages/webchat/scripts/smoke-consume.mjs
 
   e2e:
     name: e2e fixture (${{ matrix.project }})
