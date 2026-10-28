@@ -3,13 +3,13 @@
 //   pnpm npm-release pack    [--tag npm-vX.Y.Z]   kemas hasil `pnpm build` → .npm-packs/<paket>.tgz
 //   pnpm npm-release publish [--tag npm-vX.Y.Z]   terbitkan .npm-packs berurutan; versi yang sudah ada dilewati
 // Login: CI memakai npm Trusted Publishing (OIDC); terbit pertama dari laptop memakai `npm login` + 2FA.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { NPM_PACKAGES, planPublish, releaseVersionOf } from './release.mjs';
+import { NPM_PACKAGES, isAlreadyPublishedError, planPublish, releaseVersionOf } from './release.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const PACKS_DIR = join(ROOT, '.npm-packs');
@@ -44,7 +44,21 @@ function pack() {
     }
 }
 
-function publish(version) {
+/** stderr diteruskan langsung (prompt 2FA tetap tampil) sekaligus dikumpulkan untuk diperiksa. */
+const runKeepingStderr = (bin, args, cwd) => new Promise((done, fail) => {
+    const child = spawn(bin, args, { cwd, stdio: ['inherit', 'inherit', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+        process.stderr.write(chunk);
+        stderr += chunk;
+    });
+    child.on('error', fail);
+    child.on('close', (status, signal) => {
+        done({ status: status ?? signal, stderr });
+    });
+});
+
+async function publish(version) {
     const isPublished = (name) => {
         const result = spawnSync('npm', ['view', `${name}@${version}`, 'version'], { encoding: 'utf8' });
         return result.status === 0 && result.stdout.trim() === version;
@@ -55,11 +69,17 @@ function publish(version) {
             continue;
         }
         if (!existsSync(tarballOf(dir))) throw new Error(`${tarballOf(dir)} belum ada — jalankan pnpm npm-release pack dulu`);
-        run('npm', ['publish', tarballOf(dir), '--access', 'public'], ROOT);
+        const { status, stderr } = await runKeepingStderr('npm', ['publish', tarballOf(dir), '--access', 'public'], ROOT);
+        if (status === 0) continue;
+        if (isAlreadyPublishedError(stderr)) {
+            console.info(`= ${name}@${version} sudah terbit (metadata registry belum diperbarui), dilewati`);
+            continue;
+        }
+        throw new Error(`npm publish ${tarballOf(dir)} gagal (kode ${status})`);
     }
 }
 
-function main() {
+async function main() {
     const version = releaseVersionOf(manifests, values.tag);
     switch (command) {
         case 'check':
@@ -69,7 +89,7 @@ function main() {
             pack();
             return;
         case 'publish':
-            publish(version);
+            await publish(version);
             return;
         default:
             throw new Error('perintah: check | pack | publish');
@@ -77,7 +97,7 @@ function main() {
 }
 
 try {
-    main();
+    await main();
 } catch (error) {
     console.error(`npm-release: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);

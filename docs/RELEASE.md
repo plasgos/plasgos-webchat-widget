@@ -103,8 +103,10 @@ Versi yang sudah terbit di npm tidak bisa ditimpa atau dipakai ulang. Push tag =
 
 Workflow `.github/workflows/release-npm.yml`: versi kelima paket = tag → lint, typecheck, test, build, anggaran
 ukuran, smoke → `pnpm pack` per paket (LICENSE akar ikut) → `npm publish` berurutan, paket inti dulu. Versi yang
-sudah ada di npm dilewati, jadi job yang gagal di tengah cukup di-*re-run*. Login lewat npm Trusted Publishing
-(OIDC, tanpa token); provenance terpasang otomatis.
+sudah ada di npm dilewati, jadi job yang gagal di tengah cukup di-*re-run*. Metadata npm di-cache beberapa menit:
+versi yang baru terbit bisa belum terlihat, lalu `npm publish` menolaknya ("cannot publish over the previously
+published versions") — penolakan itu juga dianggap sudah terbit. Login lewat npm Trusted Publishing (OIDC, tanpa
+token); provenance terpasang otomatis.
 
 ```bash
 pnpm build && pnpm npm-release pack          # periksa isi: tar tzf .npm-packs/react.tgz
