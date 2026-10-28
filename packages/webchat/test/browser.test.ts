@@ -23,14 +23,14 @@ describe('@plasgos/webchat di peramban', () => {
 
     it('boot & identify masuk antrean yang sama dengan snippet; loader disuntik SEKALI walau dipanggil berulang', async () => {
         const { loadWebchat } = await fresh();
-        const options = { widgetId: 'wgt_0123456789abcdef01234567', identityToken: 'jwt-tenant', loaderUrl: '/loader.js', widgetOrigin: 'https://widget.plasgoschat.com', nonce: 'n0nce' };
+        const options = { widgetId: 'wgt_0123456789abcdef01234567', identityToken: 'jwt-tenant', loaderUrl: '/loader.js', widgetOrigin: 'https://widget.plasgoschat.my.id', nonce: 'n0nce' };
 
         await loadWebchat(options);
         await loadWebchat(options);
 
         expect(loaders()).toHaveLength(1);
         const script = loaders()[0];
-        expect(script?.getAttribute('data-widget-origin')).toBe('https://widget.plasgoschat.com');
+        expect(script?.getAttribute('data-widget-origin')).toBe('https://widget.plasgoschat.my.id');
         expect(script?.nonce).toBe('n0nce');
         const queue = (window as unknown as { Plasgos: { q: unknown[][] } }).Plasgos.q;
         expect(queue[0]).toEqual(['boot', { widgetId: 'wgt_0123456789abcdef01234567' }]);
@@ -45,11 +45,22 @@ describe('@plasgos/webchat di peramban', () => {
         await loadWebchat({ widgetId: 'wgt_0123456789abcdef01234567', widgetOrigin: 'https://evil.example' });
         expect(loaders()).toHaveLength(0);
         const page = window.location.origin;
-        expect(isTrustedPlasgosUrl('https://cdn.plasgoschat.com/loader/v1/loader.js', page)).toBe(true);
-        expect(isTrustedPlasgosUrl('http://cdn.plasgoschat.com/loader.js', page)).toBe(false);
-        expect(isTrustedPlasgosUrl('https://plasgoschat.com.evil.example/x.js', page)).toBe(false);
+        expect(isTrustedPlasgosUrl('https://cdn.plasgoschat.my.id/loader/v1/loader.js', page)).toBe(true);
+        expect(isTrustedPlasgosUrl('http://cdn.plasgoschat.my.id/loader.js', page)).toBe(false);
+        expect(isTrustedPlasgosUrl('https://plasgoschat.my.id.evil.example/x.js', page)).toBe(false);
         expect(isTrustedPlasgosUrl('/packages/loader/dist/loader.js', page)).toBe(true);
         expect(isTrustedPlasgosUrl('http://127.0.0.1:4400', page)).toBe(true);
+    });
+
+
+    it('loader bawaan selalu lolos daftar host tepercaya — ganti domain CDN tanpa memperbarui daftar = paket mati', async () => {
+        // Dulu: DEFAULT_LOADER_URL pindah ke plasgoschat.my.id sementara daftar host masih plasgoschat.com → setiap
+        // pemasangan npm tanpa `loaderUrl` ditolak.
+        const { loadWebchat, isTrustedPlasgosUrl, DEFAULT_LOADER_URL } = await fresh();
+        expect(isTrustedPlasgosUrl(DEFAULT_LOADER_URL, 'https://toko.example')).toBe(true);
+        await loadWebchat({ widgetId: 'wgt_0123456789abcdef01234567' });
+        expect(loaders()).toHaveLength(1);
+        expect(loaders()[0]?.getAttribute('src')).toBe(DEFAULT_LOADER_URL);
     });
 
 

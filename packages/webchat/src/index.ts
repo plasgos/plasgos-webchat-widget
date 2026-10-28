@@ -84,7 +84,7 @@ type HostWindow = Window & { Plasgos?: CommandFunction; trustedTypes?: TrustedTy
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
 /**
- * URL skrip/origin widget yang boleh dipakai: host Plasgos (`plasgoschat.com` & subdomainnya, https), origin halaman
+ * URL skrip/origin widget yang boleh dipakai: host Plasgos (`plasgoschat.my.id` & subdomainnya, https), origin halaman
  * ini sendiri, atau loopback (pengembangan). Selain itu ditolak — atribut elemen yang disisipkan lewat celah injeksi
  * HTML tak bisa memuat skrip penyerang (menembus CSP `strict-dynamic` & Trusted Types) atau mengirim token identitas
  * ke iframe penyerang (audit 2026-10-16).
@@ -102,7 +102,7 @@ export function isTrustedPlasgosUrl(value: string, pageOrigin: string): boolean 
     if (LOOPBACK_HOSTS.includes(url.hostname)) {
         return url.protocol === 'http:' || url.protocol === 'https:';
     }
-    return url.protocol === 'https:' && (url.hostname === 'plasgoschat.com' || url.hostname.endsWith('.plasgoschat.com'));
+    return url.protocol === 'https:' && (url.hostname === 'plasgoschat.my.id' || url.hostname.endsWith('.plasgoschat.my.id'));
 }
 
 const LOADER_MARK = 'data-plasgos-webchat-loader';

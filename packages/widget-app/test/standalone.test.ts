@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { standaloneApi, stripIdentityFragment } from '../src/standalone';
 
-const BASE = 'https://widget.plasgoschat.com/m/wgt_0123456789abcdef01234567?utm_source=instagram';
+const BASE = 'https://widget.plasgoschat.my.id/m/wgt_0123456789abcdef01234567?utm_source=instagram';
 
 describe('halaman chat penuh: identitas TIDAK dari URL (login CSRF, W10b)', () => {
     it('fragmen #identity_token dihapus dari alamat & diabaikan; fragmen lain dipertahankan', () => {
