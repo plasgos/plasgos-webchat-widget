@@ -46,10 +46,10 @@ describe('protokol postMessage v1', () => {
 
     it('event dipercaya hanya bila origin DAN source cocok', () => {
         const frame = {};
-        const peer = { origin: 'https://widget.plasgoschat.com', source: frame };
+        const peer = { origin: 'https://widget.plasgoschat.my.id', source: frame };
 
-        expect(isFromPeer({ origin: 'https://widget.plasgoschat.com', source: frame as Window }, peer)).toBe(true);
-        expect(isFromPeer({ origin: 'https://widget.plasgoschat.com', source: {} as Window }, peer)).toBe(false);
+        expect(isFromPeer({ origin: 'https://widget.plasgoschat.my.id', source: frame as Window }, peer)).toBe(true);
+        expect(isFromPeer({ origin: 'https://widget.plasgoschat.my.id', source: {} as Window }, peer)).toBe(false);
         expect(isFromPeer({ origin: 'https://evil.example', source: frame as Window }, peer)).toBe(false);
     });
 

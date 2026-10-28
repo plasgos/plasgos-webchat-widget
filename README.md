@@ -25,7 +25,7 @@ Widget yang sebenarnya selalu sama (aplikasi di iframe); yang berbeda per framew
 
 ## Pengembangan
 
-Prasyarat: Node ≥ 20, pnpm (versi dipin di `packageManager`, aktifkan dengan `corepack enable`).
+Prasyarat: Node `^22.22.3 || ^24.15.0 || >=26` (devDependency Angular 22; ditolak `engine-strict`), pnpm (versi dipin di `packageManager`, aktifkan dengan `corepack enable`).
 
 ```bash
 pnpm install
@@ -48,7 +48,7 @@ Lighthouse mencari Chrome lewat `chrome-launcher` (`CHROME_PATH` bila perlu).
 Loader TIDAK memanggil API; ia hanya membuat iframe `${origin widget}/w/${widgetId}`. Origin itu ditanam saat build:
 
 ```bash
-PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.com pnpm build   # bawaan (produksi)
+PLASGOS_WIDGET_ORIGIN=https://widget.plasgoschat.my.id pnpm build   # bawaan (produksi)
 PLASGOS_WIDGET_ORIGIN=https://widget.staging.example pnpm build   # lingkungan lain
 ```
 
@@ -183,6 +183,9 @@ saat offline, dua tab pengunjung yang sama, audit aksesibilitas axe (WCAG 2.1 A/
 Semver per paket. Loader: `loader/<x.y.z>/loader.js` immutable (SRI di catatan rilis) dan `loader/v1/` mengikuti
 rilis minor/patch terbaru major 1. Perubahan protokol postMessage yang tidak kompatibel = versi protokol baru;
 loader & iframe mengabaikan versi yang tak dikenalnya. Rilis CDN dan rollback dibahas di fase W3g.
+
+Paket npm (`@plasgos/webchat` dan keempat wrapper) berbagi satu versi dan terbit lewat tag `npm-vX.Y.Z`:
+[docs/RELEASE.md → Rilis npm](docs/RELEASE.md#rilis-npm).
 
 ## Lisensi
 

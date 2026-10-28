@@ -1,5 +1,5 @@
 // `element.js` untuk CDN (`loader/v1/element.js`): satu berkas modul ES tanpa dependensi, didaftarkan saat dimuat:
-//   <script type="module" src="https://cdn.plasgoschat.com/loader/v1/element.js"></script>
+//   <script type="module" src="https://cdn.plasgoschat.my.id/loader/v1/element.js"></script>
 import { build } from 'esbuild';
 
 await build({

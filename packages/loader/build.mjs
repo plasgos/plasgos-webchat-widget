@@ -2,9 +2,9 @@
 // Origin aplikasi widget ditanam per lingkungan: PLASGOS_WIDGET_ORIGIN (bawaan produksi).
 import { build } from 'esbuild';
 
-const widgetOrigin = process.env.PLASGOS_WIDGET_ORIGIN || 'https://widget.plasgoschat.com';
+const widgetOrigin = process.env.PLASGOS_WIDGET_ORIGIN || 'https://widget.plasgoschat.my.id';
 if (!/^https?:\/\/[^/]+$/.test(widgetOrigin)) {
-    throw new Error(`PLASGOS_WIDGET_ORIGIN harus origin tanpa path, mis. https://widget.plasgoschat.com — dapat "${widgetOrigin}"`);
+    throw new Error(`PLASGOS_WIDGET_ORIGIN harus origin tanpa path, mis. https://widget.plasgoschat.my.id — dapat "${widgetOrigin}"`);
 }
 
 await build({

@@ -1,6 +1,6 @@
 {
   "name": "@plasgos/webchat",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Widget webchat Plasgos CRM untuk aplikasi berbundler (Vite, webpack, Next, Nuxt, Angular, SvelteKit, Astro, Remix). Aman SSR.",
   "keywords": [
     "plasgos",
@@ -12,6 +12,15 @@
   ],
   "license": "SEE LICENSE IN LICENSE",
   "author": "Plasgos",
+  "homepage": "https://github.com/plasgos/plasgos-webchat-widget/tree/main/packages/webchat#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plasgos/plasgos-webchat-widget.git",
+    "directory": "packages/webchat"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

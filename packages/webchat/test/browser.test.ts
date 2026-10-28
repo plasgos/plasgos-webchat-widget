@@ -78,7 +78,7 @@ describe('@plasgos/webchat di peramban', () => {
 
     it('snippet/plugin sudah memasang loader → paket tak menyuntik loader kedua', async () => {
         const existing = document.createElement('script');
-        existing.src = 'https://cdn.plasgoschat.com/loader/v1/loader.js';
+        existing.src = 'https://cdn.plasgoschat.my.id/loader/v1/loader.js';
         document.head.appendChild(existing);
         const { loadWebchat } = await fresh();
 

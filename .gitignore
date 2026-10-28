@@ -26,3 +26,6 @@ fixtures/apps/*/dist/
 fixtures/apps/*/.astro/
 .cdn-local/
 release-notes/
+.npm-packs/
+# LICENSE akar disalin sementara saat `pnpm npm-release pack`.
+packages/*/LICENSE
