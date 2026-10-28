@@ -762,6 +762,17 @@ describe('aplikasi widget (iframe)', () => {
     });
 
 
+    it('tema gelap tak membuat latar iframe buram: `color-scheme` di body, root tetap `normal` seperti iframe loader', () => {
+        // Skema root dokumen ≠ skema elemen `<iframe>` (loader: `normal`) → browser mengecat latar iframe buram (dulu
+        // kotak hitam di sekeliling launcher & jendela pada tema gelap/otomatis). jsdom tak merender — cukup aturannya.
+        const rootRules = STYLES.match(/:root(?:\[[^\]]*\])?\{[^}]*\}/g) ?? [];
+        expect(rootRules.length).toBeGreaterThan(0);
+        expect(rootRules.filter((rule) => rule.includes('color-scheme'))).toEqual([]);
+        expect(STYLES).toContain('body{color-scheme:light}');
+        expect(STYLES).toContain(':root[data-theme="dark"] body{color-scheme:dark}');
+    });
+
+
     it('agen mengetik → indikator; sesi dicabut → widget berhenti dengan pesan & event error', async () => {
         const { app, port, container } = await startApp();
         app.command({ name: 'open', args: [] });

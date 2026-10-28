@@ -6,11 +6,18 @@
  * `[hidden]` selalu menang: elemen yang ditata `display:grid|flex` (mis. lencana belum dibaca) dulu tetap tampil walau
  * `hidden` (lencana "0" di launcher) — satu aturan untuk semua elemen, bukan `[hidden]` per kelas.
  */
+/**
+ * `color-scheme` tema dipasang di `body`, BUKAN `:root`: skema root dokumen yang berbeda dari elemen `<iframe>`
+ * (loader: `normal`) membuat browser mengecat latar iframe buram — dulu kotak hitam di sekeliling launcher & jendela
+ * pada tema gelap/otomatis. Root tetap `normal` → iframe transparan; kontrol & scrollbar di `body` tetap ikut tema.
+ */
 export const STYLES = `
 :root{--pw-primary:#f0592b;--pw-on-primary:#fff;--pw-bg:#fff;--pw-surface:#f7f5f3;--pw-text:#1f2024;--pw-muted:#6b6a72;
---pw-border:#e9e4df;--pw-in:#f1efed;--pw-danger:#b42318;--pw-radius:16px;color-scheme:light}
+--pw-border:#e9e4df;--pw-in:#f1efed;--pw-danger:#b42318;--pw-radius:16px}
 :root[data-theme="dark"]{--pw-bg:#1d1b19;--pw-surface:#26231f;--pw-text:#f3efea;--pw-muted:#b3aca4;--pw-border:#3a342e;
---pw-in:#2f2a25;--pw-danger:#ff9b8f;color-scheme:dark}
+--pw-in:#2f2a25;--pw-danger:#ff9b8f}
+body{color-scheme:light}
+:root[data-theme="dark"] body{color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0;height:100%;background:transparent;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
