@@ -165,6 +165,9 @@ Semver per paket. Loader: `loader/<x.y.z>/loader.js` immutable (SRI di catatan r
 rilis minor/patch terbaru major 1. Perubahan protokol postMessage yang tidak kompatibel = versi protokol baru;
 loader & iframe mengabaikan versi yang tak dikenalnya. Rilis CDN dan rollback dibahas di fase W3g.
 
+Paket npm (`@plasgos/webchat` dan keempat wrapper) berbagi satu versi dan terbit lewat tag `npm-vX.Y.Z`:
+[docs/RELEASE.md → Rilis npm](docs/RELEASE.md#rilis-npm).
+
 ## Lisensi
 
 Proprietary — lihat [LICENSE](LICENSE).
