@@ -1,6 +1,6 @@
 {
   "name": "@plasgos/webchat-vue",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Plugin & composable Vue 3 untuk widget webchat Plasgos CRM (Vue Router, Nuxt 3 `.client`). Aman SSR.",
   "keywords": ["plasgos", "crm", "webchat", "chat", "widget", "vue", "nuxt"],
   "license": "SEE LICENSE IN LICENSE",

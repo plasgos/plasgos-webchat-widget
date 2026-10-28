@@ -1,6 +1,6 @@
 {
   "name": "@plasgos/webchat-svelte",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Komponen Svelte 5 untuk widget webchat Plasgos CRM (SvelteKit, Vite). Aman SSR.",
   "keywords": ["plasgos", "crm", "webchat", "chat", "widget", "svelte", "sveltekit"],
   "license": "SEE LICENSE IN LICENSE",

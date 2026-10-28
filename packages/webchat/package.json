@@ -1,6 +1,6 @@
 {
   "name": "@plasgos/webchat",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Widget webchat Plasgos CRM untuk aplikasi berbundler (Vite, webpack, Next, Nuxt, Angular, SvelteKit, Astro, Remix). Aman SSR.",
   "keywords": [
     "plasgos",
