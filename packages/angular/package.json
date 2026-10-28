@@ -1,6 +1,6 @@
 {
   "name": "@plasgos/webchat-angular",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Provider & service Angular 17+ (standalone, SSR, zoneless) untuk widget webchat Plasgos CRM.",
   "keywords": ["plasgos", "crm", "webchat", "chat", "widget", "angular"],
   "license": "SEE LICENSE IN LICENSE",

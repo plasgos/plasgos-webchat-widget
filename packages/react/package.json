@@ -1,6 +1,6 @@
 {
   "name": "@plasgos/webchat-react",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Komponen & hook React untuk widget webchat Plasgos CRM (React 17–19, Next.js, Remix, Gatsby). Aman SSR.",
   "keywords": ["plasgos", "crm", "webchat", "chat", "widget", "react", "nextjs"],
   "license": "SEE LICENSE IN LICENSE",
