@@ -39,3 +39,13 @@ export function releaseVersionOf(manifests, tag) {
 export function planPublish(manifests, isPublished) {
     return manifests.map(({ dir, name }) => ({ dir, name, skip: isPublished(name) }));
 }
+
+/**
+ * Penolakan `npm publish` karena versinya sudah ada. Metadata registry di-cache beberapa menit, jadi `npm view` sesaat
+ * setelah terbit (mis. terbit manual lalu tag langsung di-push) bisa belum melihat versi itu — penolakan ini berarti
+ * versi sudah terbit, bukan galat.
+ * @param {string} stderr
+ */
+export function isAlreadyPublishedError(stderr) {
+    return /cannot publish over the previously published versions?/i.test(stderr);
+}

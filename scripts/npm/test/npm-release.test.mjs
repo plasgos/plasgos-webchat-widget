@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
-import { NPM_PACKAGES, planPublish, releaseVersionOf, versionFromTag } from '../release.mjs';
+import { NPM_PACKAGES, isAlreadyPublishedError, planPublish, releaseVersionOf, versionFromTag } from '../release.mjs';
 
 const manifestsAt = (...versions) => versions.map((version, index) => ({
     dir: NPM_PACKAGES[index],
@@ -44,5 +44,13 @@ describe('rilis npm', () => {
             ['angular', false],
             ['svelte', false],
         ]);
+    });
+
+    it('penolakan "versi sudah ada" = sudah terbit; penolakan lain tetap galat', () => {
+        expect(isAlreadyPublishedError('npm error 403 403 Forbidden - PUT https://registry.npmjs.org/@plasgos%2fwebchat'
+            + ' - You cannot publish over the previously published versions: 1.0.0.')).toBe(true);
+        expect(isAlreadyPublishedError('npm error 403 403 Forbidden - PUT https://registry.npmjs.org/@plasgos%2fwebchat'
+            + ' - OIDC permission denied for this action')).toBe(false);
+        expect(isAlreadyPublishedError('npm error code E404')).toBe(false);
     });
 });
