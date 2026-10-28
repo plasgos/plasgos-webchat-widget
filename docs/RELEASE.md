@@ -1,7 +1,8 @@
 # Rilis CDN widget webchat
 
 Loader, Web Component, dan aplikasi widget terbit ke CDN berversi (keputusan K5,
-`api-crm/server/modules/webchat/docs/WEBCHAT_DESIGN.md` §13.5). Paket npm (`@plasgos/webchat*`) terbit terpisah.
+`api-crm/server/modules/webchat/docs/WEBCHAT_DESIGN.md` §13.5). Paket npm (`@plasgos/webchat*`) terbit terpisah —
+lihat [Rilis npm](#rilis-npm).
 
 ## Susunan CDN
 
@@ -85,9 +86,77 @@ lingkungan → anggaran ukuran → deploy (atau pindah alias) → catatan rilis 
 `PLASGOS_WIDGET_ORIGIN`, `PLASGOS_CDN_ORIGIN`, `CDN_BUCKET`, `CDN_DISTRIBUTION_ID`, `AWS_DEPLOY_ROLE_ARN`,
 `AWS_REGION`. Produksi sebaiknya memakai *required reviewers* pada environment.
 
+## Rilis npm
+
+Lima paket publik terbit ke npm dengan **satu versi bersama**, terpisah dari versi CDN: `@plasgos/webchat`,
+`@plasgos/webchat-react`, `-vue`, `-angular`, `-svelte`. Dashboard CRM (tab framework di halaman pemasangan)
+menyuruh tenant memasang paket-paket ini. `loader`, `protocol`, dan `widget-app` privat (hanya CDN).
+
+Versi yang sudah terbit di npm tidak bisa ditimpa atau dipakai ulang. Push tag = langsung terbit.
+
+### Rilis rutin
+
+1. Naikkan `version` di `packages/{webchat,react,vue,angular,svelte}/package.json` ke nilai yang sama.
+   Wrapper bergantung pada `@plasgos/webchat` lewat `workspace:*`, yang saat dikemas menjadi versi persis yang sama.
+2. Commit, push ke `main`, tunggu CI hijau (CI ikut menjalankan `pnpm npm-release pack`).
+3. `git tag npm-vX.Y.Z && git push origin npm-vX.Y.Z`.
+
+Workflow `.github/workflows/release-npm.yml`: versi kelima paket = tag → lint, typecheck, test, build, anggaran
+ukuran, smoke → `pnpm pack` per paket (LICENSE akar ikut) → `npm publish` berurutan, paket inti dulu. Versi yang
+sudah ada di npm dilewati, jadi job yang gagal di tengah cukup di-*re-run*. Login lewat npm Trusted Publishing
+(OIDC, tanpa token); provenance terpasang otomatis.
+
+```bash
+pnpm build && pnpm npm-release pack          # periksa isi: tar tzf .npm-packs/react.tgz
+pnpm npm-release check --tag npm-v1.2.0      # versi kelima paket = tag?
+```
+
+### Persiapan sekali
+
+npm hanya mengizinkan trusted publisher untuk paket yang **sudah ada**, jadi versi pertama terbit dari laptop.
+
+1. **Terbit pertama** — akun npm `plasgos` (pemilik scope `@plasgos`, 2FA aktif), dari commit `main` yang akan
+   ditag:
+   ```bash
+   pnpm install --frozen-lockfile && pnpm build
+   pnpm npm-release pack
+   npm login
+   pnpm npm-release publish        # minta kode 2FA per paket; urutan & lewati-yang-sudah-ada sama dengan CI
+   git tag npm-v1.0.0 && git push origin npm-v1.0.0
+   ```
+   Workflow untuk tag ini menjalankan semua pemeriksaan lalu melewati kelima paket (sudah terbit).
+2. **Trusted publisher** untuk tiap paket — kerjakan tepat sebelum rilis CI pertama, karena konfigurasi baru
+   kedaluwarsa bila tidak dipakai publish dalam 2 hari. Lewat npmjs.com (paket → Settings → Trusted Publisher →
+   GitHub Actions):
+
+   | Field | Isi |
+   |---|---|
+   | Organization or user | `plasgos` |
+   | Repository | `plasgos-webchat-widget` |
+   | Workflow filename | `release-npm.yml` |
+   | Environment name | *(kosong)* |
+   | Allowed actions | centang **`npm publish`** |
+
+   Konfigurasi yang dibuat setelah 3 September 2026 bawaannya hanya mengizinkan `npm stage publish`; tanpa
+   centang `npm publish` job gagal dengan `E403 … OIDC permission denied for this action`. Lewat CLI (npm ≥ 11.15.0,
+   2FA):
+   ```bash
+   for p in webchat webchat-react webchat-vue webchat-angular webchat-svelte; do
+     npm trust github "@plasgos/$p" --file release-npm.yml --repo plasgos/plasgos-webchat-widget --allow-publish
+   done
+   ```
+3. Setelah rilis CI pertama berhasil: tiap paket → **Settings → Publishing access → Require two-factor
+   authentication and disallow tokens**.
+4. Disarankan: *tag ruleset* GitHub untuk pola `npm-v*` (hanya admin yang boleh membuat tag rilis).
+
+Paket inti menanam URL loader bawaan (`DEFAULT_LOADER_URL`, `cdn.plasgoschat.my.id`). Kode dari dashboard selalu
+mengirim `loaderUrl`, jadi pergantian domain CDN cukup lewat env api-crm; URL bawaan baru berubah dengan rilis npm.
+
 ## Uji
 
 - `scripts/cdn/test/cdn.test.mjs` — versi immutable, deploy idempoten, rollback, `--no-alias`, perintah AWS CLI.
+- `scripts/npm/test/npm-release.test.mjs` — tag `npm-vX.Y.Z`, versi kelima paket sama, urutan terbit, lewati versi
+  yang sudah ada.
 - `e2e/cdn.spec.ts` — bucket lokal (`file://.cdn-local`, disiapkan `e2e/global-setup.ts`: terbit 1.0.0 & 1.1.0
   lalu rollback ke 1.0.0) dilayani server fixture berperan CloudFront: SRI cocok → widget tampil; SRI dirusak →
   peramban menolak; alias = isi versi 1.0.0 dengan header alias.

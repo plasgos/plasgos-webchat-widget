@@ -33,6 +33,8 @@ jobs:
         run: pnpm size
       - name: Paket npm dapat diimpor di Node (ESM & CJS, SSR)
         run: pnpm --filter @plasgos/webchat smoke
+      - name: Paket npm dapat dikemas (versi kelima paket sama)
+        run: pnpm npm-release pack
 
   consumer:
     name: paket npm dapat diimpor di Node 20 (SSR situs tenant)

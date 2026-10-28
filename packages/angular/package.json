@@ -1,10 +1,19 @@
 {
   "name": "@plasgos/webchat-angular",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Provider & service Angular 17+ (standalone, SSR, zoneless) untuk widget webchat Plasgos CRM.",
   "keywords": ["plasgos", "crm", "webchat", "chat", "widget", "angular"],
   "license": "SEE LICENSE IN LICENSE",
   "author": "Plasgos",
+  "homepage": "https://github.com/plasgos/plasgos-webchat-widget/tree/main/packages/angular#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plasgos/plasgos-webchat-widget.git",
+    "directory": "packages/angular"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
