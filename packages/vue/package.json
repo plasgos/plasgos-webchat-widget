@@ -1,10 +1,19 @@
 {
   "name": "@plasgos/webchat-vue",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Plugin & composable Vue 3 untuk widget webchat Plasgos CRM (Vue Router, Nuxt 3 `.client`). Aman SSR.",
   "keywords": ["plasgos", "crm", "webchat", "chat", "widget", "vue", "nuxt"],
   "license": "SEE LICENSE IN LICENSE",
   "author": "Plasgos",
+  "homepage": "https://github.com/plasgos/plasgos-webchat-widget/tree/main/packages/vue#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plasgos/plasgos-webchat-widget.git",
+    "directory": "packages/vue"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
