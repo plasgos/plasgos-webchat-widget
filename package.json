@@ -22,7 +22,8 @@
     "e2e:live": "playwright test -c playwright.live.config.ts",
     "e2e:apps": "playwright test -c playwright.apps.config.ts",
     "apps:build": "node scripts/build-apps.mjs",
-    "cdn": "node scripts/cdn/cli.mjs"
+    "cdn": "node scripts/cdn/cli.mjs",
+    "npm-release": "node scripts/npm/cli.mjs"
   },
   "devDependencies": {
     "@angular/common": "22.2.2",

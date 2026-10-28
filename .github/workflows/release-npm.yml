@@ -1,0 +1,47 @@
+name: release-npm
+
+# Terbitkan paket npm @plasgos/webchat, -react, -vue, -angular, -svelte saat tag `npm-vX.Y.Z` di-push
+# (docs/RELEASE.md "Rilis npm"). Kelima paket berversi sama. Login lewat npm Trusted Publishing (OIDC, tanpa token):
+# tiap paket → Settings → Trusted Publisher = plasgos / plasgos-webchat-widget / release-npm.yml, Allowed actions
+# `npm publish`. Trusted publishing butuh Node ≥ 22.14 dan npm CLI ≥ 11.5.1; provenance terpasang otomatis.
+on:
+  push:
+    tags: ["npm-v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+      - name: npm CLI untuk trusted publishing (≥ 11.5.1)
+        run: npm install -g npm@latest && npm --version
+      - run: pnpm install --frozen-lockfile
+      - name: Versi kelima paket = tag
+        run: pnpm npm-release check --tag "$GITHUB_REF_NAME"
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Anggaran ukuran (loader ≤5 KB, aplikasi widget ≤60 KB gzip)
+        run: pnpm size
+      - name: Paket npm dapat diimpor di Node (ESM & CJS, SSR)
+        run: pnpm --filter @plasgos/webchat smoke
+      - name: Kemas (pnpm pack — workspace:* diganti versi rilis)
+        run: pnpm npm-release pack --tag "$GITHUB_REF_NAME"
+      - name: Terbitkan ke npm (paket inti dulu; versi yang sudah ada dilewati)
+        run: pnpm npm-release publish --tag "$GITHUB_REF_NAME"
